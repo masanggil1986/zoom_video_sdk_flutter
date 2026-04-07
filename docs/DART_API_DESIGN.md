@@ -38,7 +38,7 @@ single-page overview.
 - **Streams only.** No callback-based listeners.
 - A single `Stream<ZoomEvent> get events` exposes all events via a `sealed class`.
 - Typed convenience getters (`onSessionJoin`, `onUserJoined`, etc.) filter
-  the main stream with `Stream.whereType<T>()`.
+  the main stream with `Stream.where().cast<T>()`.
 - Events are broadcast streams — multiple listeners are safe.
 - `dispose()` closes all stream controllers.
 
@@ -458,6 +458,9 @@ Future<void> enableMicOriginalInput(bool enable)
 Enables or disables original microphone input (bypasses noise suppression / echo
 cancellation).
 
+Native SDKs expose this via a separate `audioSettingHelper`. This design consolidates
+it into `ZoomAudioHelper` for simplicity (per reference section 5.3).
+
 | Android | iOS | Windows | macOS |
 |---------|-----|---------|-------|
 | ✅ | ✅ | ✅ | ✅ |
@@ -833,6 +836,12 @@ Returns the currently active virtual background, or `null` if none.
 ### Host Controls
 
 Host control methods are on the `userHelper` accessor. Requires host or manager role.
+
+**Implementation note:** The existing Flutter wrapper (`flutter_zoom_videosdk`) does not
+expose host control methods. Windows has `IZoomVideoSDKUserHelper` and macOS has
+`ZMVideoSDKUserHelper`. Android/iOS native SDKs support host controls per the feature
+matrix (reference section 2), but exact native API names are not documented in the
+reference.
 
 #### `userHelper.makeHost`
 

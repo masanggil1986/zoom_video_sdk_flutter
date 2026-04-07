@@ -422,6 +422,7 @@ final class ErrorEvent extends ZoomEvent {
 class ZoomAudioHelper {
   ZoomAudioHelper(this._channel);
 
+  // ignore: unused_field
   final MethodChannel _channel;
 
   /// Starts the audio engine (connects microphone and speaker).
@@ -458,6 +459,9 @@ class ZoomAudioHelper {
 
   /// Enables or disables original microphone input (bypasses noise
   /// suppression and echo cancellation).
+  ///
+  /// Native SDKs expose this via a separate `audioSettingHelper`.
+  /// This class consolidates it for simplicity.
   ///
   /// **Platform support:** Android ✅ iOS ✅ Windows ✅ macOS ✅
   Future<void> enableMicOriginalInput(bool enable) {
@@ -501,6 +505,7 @@ class ZoomAudioHelper {
 class ZoomVideoHelper {
   ZoomVideoHelper(this._channel);
 
+  // ignore: unused_field
   final MethodChannel _channel;
 
   /// Starts the local camera video.
@@ -543,6 +548,7 @@ class ZoomVideoHelper {
 class ZoomShareHelper {
   ZoomShareHelper(this._channel);
 
+  // ignore: unused_field
   final MethodChannel _channel;
 
   /// Starts screen sharing.
@@ -590,6 +596,7 @@ class ZoomShareHelper {
 class ZoomChatHelper {
   ZoomChatHelper(this._channel);
 
+  // ignore: unused_field
   final MethodChannel _channel;
 
   /// Sends a chat message to all participants.
@@ -632,6 +639,7 @@ class ZoomChatHelper {
 class ZoomRecordingHelper {
   ZoomRecordingHelper(this._channel);
 
+  // ignore: unused_field
   final MethodChannel _channel;
 
   /// Checks whether the current user can start cloud recording. Desktop only.
@@ -665,6 +673,7 @@ class ZoomRecordingHelper {
 class ZoomVirtualBackgroundHelper {
   ZoomVirtualBackgroundHelper(this._channel);
 
+  // ignore: unused_field
   final MethodChannel _channel;
 
   /// Returns whether virtual backgrounds are supported on the current device.
@@ -718,6 +727,7 @@ class ZoomVirtualBackgroundHelper {
 class ZoomUserHelper {
   ZoomUserHelper(this._channel);
 
+  // ignore: unused_field
   final MethodChannel _channel;
 
   /// Transfers host role to the specified user.
@@ -794,6 +804,7 @@ class ZoomVideoSdk {
   }
 
   final MethodChannel _channel;
+  // ignore: unused_field
   final EventChannel _eventChannel;
 
   final StreamController<ZoomEvent> _eventController =

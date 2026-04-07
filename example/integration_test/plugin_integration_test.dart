@@ -14,11 +14,10 @@ import 'package:zoom_video_sdk_flutter/zoom_video_sdk_flutter.dart';
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('getPlatformVersion test', (WidgetTester tester) async {
-    final ZoomVideoSdkFlutter plugin = ZoomVideoSdkFlutter();
-    final String? version = await plugin.getPlatformVersion();
-    // The version string depends on the host platform running the test, so
-    // just assert that some non-empty string is returned.
-    expect(version?.isNotEmpty, true);
+  testWidgets('ZoomVideoSdk can be instantiated', (WidgetTester tester) async {
+    final sdk = ZoomVideoSdk();
+    expect(sdk.audioHelper, isNotNull);
+    expect(sdk.videoHelper, isNotNull);
+    sdk.dispose();
   });
 }
