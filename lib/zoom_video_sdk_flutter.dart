@@ -422,21 +422,20 @@ final class ErrorEvent extends ZoomEvent {
 class ZoomAudioHelper {
   ZoomAudioHelper(this._channel);
 
-  // ignore: unused_field
   final MethodChannel _channel;
 
   /// Starts the audio engine (connects microphone and speaker).
   ///
   /// **Platform support:** Android ✅ iOS ✅ Windows ✅ macOS ✅
-  Future<void> startAudio() {
-    throw UnimplementedError('Not yet implemented');
+  Future<void> startAudio() async {
+    await _channel.invokeMethod<void>('audio.startAudio');
   }
 
   /// Stops the audio engine.
   ///
   /// **Platform support:** Android ✅ iOS ✅ Windows ✅ macOS ✅
-  Future<void> stopAudio() {
-    throw UnimplementedError('Not yet implemented');
+  Future<void> stopAudio() async {
+    await _channel.invokeMethod<void>('audio.stopAudio');
   }
 
   /// Mutes audio for the given user.
@@ -444,8 +443,8 @@ class ZoomAudioHelper {
   /// Non-host callers can only mute themselves.
   ///
   /// **Platform support:** Android ✅ iOS ✅ Windows ✅ macOS ✅
-  Future<void> muteAudio(String userId) {
-    throw UnimplementedError('Not yet implemented');
+  Future<void> muteAudio(String userId) async {
+    await _channel.invokeMethod<void>('audio.muteAudio', {'userId': userId});
   }
 
   /// Unmutes audio for the given user.
@@ -453,8 +452,8 @@ class ZoomAudioHelper {
   /// Non-host callers can only unmute themselves.
   ///
   /// **Platform support:** Android ✅ iOS ✅ Windows ✅ macOS ✅
-  Future<void> unmuteAudio(String userId) {
-    throw UnimplementedError('Not yet implemented');
+  Future<void> unmuteAudio(String userId) async {
+    await _channel.invokeMethod<void>('audio.unmuteAudio', {'userId': userId});
   }
 
   /// Enables or disables original microphone input (bypasses noise
@@ -464,8 +463,10 @@ class ZoomAudioHelper {
   /// This class consolidates it for simplicity.
   ///
   /// **Platform support:** Android ✅ iOS ✅ Windows ✅ macOS ✅
-  Future<void> enableMicOriginalInput(bool enable) {
-    throw UnimplementedError('Not yet implemented');
+  Future<void> enableMicOriginalInput(bool enable) async {
+    await _channel.invokeMethod<void>('audio.enableMicOriginalInput', {
+      'enable': enable,
+    });
   }
 
   /// Sets the noise suppression level.
@@ -474,8 +475,10 @@ class ZoomAudioHelper {
   /// Windows/macOS. Android/iOS may support a subset.
   ///
   /// **Platform support:** Android ✅ iOS ✅ Windows ✅ macOS ✅
-  Future<void> setNoiseSuppression(ZoomNoiseSuppression level) {
-    throw UnimplementedError('Not yet implemented');
+  Future<void> setNoiseSuppression(ZoomNoiseSuppression level) async {
+    await _channel.invokeMethod<void>('audio.setNoiseSuppression', {
+      'level': level.name,
+    });
   }
 
   /// Returns the list of available audio input/output devices.
@@ -484,8 +487,17 @@ class ZoomAudioHelper {
   /// meaningful. iOS has limited device control.
   ///
   /// **Platform support:** Android ⚠️ iOS ⚠️ Windows ✅ macOS ✅
-  Future<List<ZoomAudioDevice>> getAudioDeviceList() {
-    throw UnimplementedError('Not yet implemented');
+  Future<List<ZoomAudioDevice>> getAudioDeviceList() async {
+    final result = await _channel.invokeListMethod<Map>(
+      'audio.getAudioDeviceList',
+    );
+    return (result ?? []).map((m) {
+      final map = Map<String, dynamic>.from(m);
+      return ZoomAudioDevice(
+        deviceId: map['deviceId'] as String,
+        deviceName: map['deviceName'] as String,
+      );
+    }).toList();
   }
 
   /// Selects an audio device by ID.
@@ -494,8 +506,10 @@ class ZoomAudioHelper {
   /// iOS has limited device control.
   ///
   /// **Platform support:** Android ⚠️ iOS ⚠️ Windows ✅ macOS ✅
-  Future<void> selectAudioDevice(String deviceId) {
-    throw UnimplementedError('Not yet implemented');
+  Future<void> selectAudioDevice(String deviceId) async {
+    await _channel.invokeMethod<void>('audio.selectAudioDevice', {
+      'deviceId': deviceId,
+    });
   }
 }
 
@@ -505,21 +519,20 @@ class ZoomAudioHelper {
 class ZoomVideoHelper {
   ZoomVideoHelper(this._channel);
 
-  // ignore: unused_field
   final MethodChannel _channel;
 
   /// Starts the local camera video.
   ///
   /// **Platform support:** Android ✅ iOS ✅ Windows ✅ macOS ✅
-  Future<void> startVideo() {
-    throw UnimplementedError('Not yet implemented');
+  Future<void> startVideo() async {
+    await _channel.invokeMethod<void>('video.startVideo');
   }
 
   /// Stops the local camera video.
   ///
   /// **Platform support:** Android ✅ iOS ✅ Windows ✅ macOS ✅
-  Future<void> stopVideo() {
-    throw UnimplementedError('Not yet implemented');
+  Future<void> stopVideo() async {
+    await _channel.invokeMethod<void>('video.stopVideo');
   }
 
   /// Switches between available cameras.
@@ -527,8 +540,8 @@ class ZoomVideoHelper {
   /// On mobile, toggles front/back camera.
   ///
   /// **Platform support:** Android ✅ iOS ✅ Windows ✅ macOS ✅
-  Future<void> switchCamera() {
-    throw UnimplementedError('Not yet implemented');
+  Future<void> switchCamera() async {
+    await _channel.invokeMethod<void>('video.switchCamera');
   }
 
   /// Returns the list of available cameras. Desktop only.
@@ -536,9 +549,16 @@ class ZoomVideoHelper {
   /// **Platform support:** Android ❌ iOS ❌ Windows ✅ macOS ✅
   ///
   /// Throws [UnimplementedError] on Android and iOS.
-  Future<List<ZoomCameraDevice>> getCameraList() {
+  Future<List<ZoomCameraDevice>> getCameraList() async {
     _assertDesktopOnly('getCameraList()');
-    throw UnimplementedError('Not yet implemented');
+    final result = await _channel.invokeListMethod<Map>('video.getCameraList');
+    return (result ?? []).map((m) {
+      final map = Map<String, dynamic>.from(m);
+      return ZoomCameraDevice(
+        deviceId: map['deviceId'] as String,
+        deviceName: map['deviceName'] as String,
+      );
+    }).toList();
   }
 }
 
@@ -548,7 +568,6 @@ class ZoomVideoHelper {
 class ZoomShareHelper {
   ZoomShareHelper(this._channel);
 
-  // ignore: unused_field
   final MethodChannel _channel;
 
   /// Starts screen sharing.
@@ -557,8 +576,8 @@ class ZoomShareHelper {
   /// Extension target. On Android, requires MediaProjection permission.
   ///
   /// **Platform support:** Android ✅ iOS ✅ Windows ✅ macOS ✅
-  Future<void> startShareScreen() {
-    throw UnimplementedError('Not yet implemented');
+  Future<void> startShareScreen() async {
+    await _channel.invokeMethod<void>('share.startShareScreen');
   }
 
   /// Shares a specific application window by its handle/ID. Desktop only.
@@ -566,16 +585,18 @@ class ZoomShareHelper {
   /// **Platform support:** Android ❌ iOS ❌ Windows ✅ macOS ✅
   ///
   /// Throws [UnimplementedError] on Android and iOS.
-  Future<void> startShareView(String windowId) {
+  Future<void> startShareView(String windowId) async {
     _assertDesktopOnly('startShareView()');
-    throw UnimplementedError('Not yet implemented');
+    await _channel.invokeMethod<void>('share.startShareView', {
+      'windowId': windowId,
+    });
   }
 
   /// Stops screen or window sharing.
   ///
   /// **Platform support:** Android ✅ iOS ✅ Windows ✅ macOS ✅
-  Future<void> stopShare() {
-    throw UnimplementedError('Not yet implemented');
+  Future<void> stopShare() async {
+    await _channel.invokeMethod<void>('share.stopShare');
   }
 
   /// Enables or disables sharing device audio alongside screen share.
@@ -584,9 +605,11 @@ class ZoomShareHelper {
   /// **Platform support:** Android ❌ iOS ❌ Windows ✅ macOS ✅
   ///
   /// Throws [UnimplementedError] on Android and iOS.
-  Future<void> enableShareDeviceAudio(bool enable) {
+  Future<void> enableShareDeviceAudio(bool enable) async {
     _assertDesktopOnly('enableShareDeviceAudio()');
-    throw UnimplementedError('Not yet implemented');
+    await _channel.invokeMethod<void>('share.enableShareDeviceAudio', {
+      'enable': enable,
+    });
   }
 }
 
@@ -596,7 +619,6 @@ class ZoomShareHelper {
 class ZoomChatHelper {
   ZoomChatHelper(this._channel);
 
-  // ignore: unused_field
   final MethodChannel _channel;
 
   /// Sends a chat message to all participants.
@@ -604,29 +626,38 @@ class ZoomChatHelper {
   /// Max message size: 10,000 bytes.
   ///
   /// **Platform support:** Android ✅ iOS ✅ Windows ✅ macOS ✅
-  Future<void> sendChatToAll(String message) {
-    throw UnimplementedError('Not yet implemented');
+  Future<void> sendChatToAll(String message) async {
+    await _channel.invokeMethod<void>('chat.sendChatToAll', {
+      'message': message,
+    });
   }
 
   /// Sends a private chat message to a specific user.
   ///
   /// **Platform support:** Android ✅ iOS ✅ Windows ✅ macOS ✅
-  Future<void> sendChatToUser(String userId, String message) {
-    throw UnimplementedError('Not yet implemented');
+  Future<void> sendChatToUser(String userId, String message) async {
+    await _channel.invokeMethod<void>('chat.sendChatToUser', {
+      'userId': userId,
+      'message': message,
+    });
   }
 
   /// Returns whether chat is disabled for the session.
   ///
   /// **Platform support:** Android ✅ iOS ✅ Windows ✅ macOS ✅
-  Future<bool> isChatDisabled() {
-    throw UnimplementedError('Not yet implemented');
+  Future<bool> isChatDisabled() async {
+    final result = await _channel.invokeMethod<bool>('chat.isChatDisabled');
+    return result ?? false;
   }
 
   /// Returns whether private (direct) chat is disabled.
   ///
   /// **Platform support:** Android ✅ iOS ✅ Windows ✅ macOS ✅
-  Future<bool> isPrivateChatDisabled() {
-    throw UnimplementedError('Not yet implemented');
+  Future<bool> isPrivateChatDisabled() async {
+    final result = await _channel.invokeMethod<bool>(
+      'chat.isPrivateChatDisabled',
+    );
+    return result ?? false;
   }
 }
 
@@ -639,7 +670,6 @@ class ZoomChatHelper {
 class ZoomRecordingHelper {
   ZoomRecordingHelper(this._channel);
 
-  // ignore: unused_field
   final MethodChannel _channel;
 
   /// Checks whether the current user can start cloud recording. Desktop only.
@@ -647,23 +677,26 @@ class ZoomRecordingHelper {
   /// **Platform support:** Android ❌ iOS ❌ Windows ✅ macOS ✅
   ///
   /// Throws [UnimplementedError] on Android and iOS.
-  Future<bool> canStartRecording() {
+  Future<bool> canStartRecording() async {
     _assertDesktopOnly('canStartRecording()');
-    throw UnimplementedError('Not yet implemented');
+    final result = await _channel.invokeMethod<bool>(
+      'recording.canStartRecording',
+    );
+    return result ?? false;
   }
 
   /// Starts cloud recording.
   ///
   /// **Platform support:** Android ✅ iOS ✅ Windows ✅ macOS ✅
-  Future<void> startCloudRecording() {
-    throw UnimplementedError('Not yet implemented');
+  Future<void> startCloudRecording() async {
+    await _channel.invokeMethod<void>('recording.startCloudRecording');
   }
 
   /// Stops cloud recording.
   ///
   /// **Platform support:** Android ✅ iOS ✅ Windows ✅ macOS ✅
-  Future<void> stopCloudRecording() {
-    throw UnimplementedError('Not yet implemented');
+  Future<void> stopCloudRecording() async {
+    await _channel.invokeMethod<void>('recording.stopCloudRecording');
   }
 }
 
@@ -673,49 +706,73 @@ class ZoomRecordingHelper {
 class ZoomVirtualBackgroundHelper {
   ZoomVirtualBackgroundHelper(this._channel);
 
-  // ignore: unused_field
   final MethodChannel _channel;
 
   /// Returns whether virtual backgrounds are supported on the current device.
   ///
   /// **Platform support:** Android ✅ iOS ✅ Windows ✅ macOS ✅
-  Future<bool> isSupported() {
-    throw UnimplementedError('Not yet implemented');
+  Future<bool> isSupported() async {
+    final result = await _channel.invokeMethod<bool>(
+      'virtualBackground.isSupported',
+    );
+    return result ?? false;
   }
 
   /// Adds a virtual background image from a file path.
   ///
   /// **Platform support:** Android ✅ iOS ✅ Windows ✅ macOS ✅
-  Future<void> addItem(String filePath) {
-    throw UnimplementedError('Not yet implemented');
+  Future<void> addItem(String filePath) async {
+    await _channel.invokeMethod<void>('virtualBackground.addItem', {
+      'filePath': filePath,
+    });
   }
 
   /// Returns all available virtual background items.
   ///
   /// **Platform support:** Android ✅ iOS ✅ Windows ✅ macOS ✅
-  Future<List<ZoomVirtualBackgroundItem>> getItemList() {
-    throw UnimplementedError('Not yet implemented');
+  Future<List<ZoomVirtualBackgroundItem>> getItemList() async {
+    final result = await _channel.invokeListMethod<Map>(
+      'virtualBackground.getItemList',
+    );
+    return (result ?? []).map((m) {
+      final map = Map<String, dynamic>.from(m);
+      return ZoomVirtualBackgroundItem(
+        imageName: map['imageName'] as String,
+        imagePath: map['imagePath'] as String,
+      );
+    }).toList();
   }
 
   /// Applies a virtual background by image name.
   ///
   /// **Platform support:** Android ✅ iOS ✅ Windows ✅ macOS ✅
-  Future<void> setItem(String imageName) {
-    throw UnimplementedError('Not yet implemented');
+  Future<void> setItem(String imageName) async {
+    await _channel.invokeMethod<void>('virtualBackground.setItem', {
+      'imageName': imageName,
+    });
   }
 
   /// Removes a virtual background by image name.
   ///
   /// **Platform support:** Android ✅ iOS ✅ Windows ✅ macOS ✅
-  Future<void> removeItem(String imageName) {
-    throw UnimplementedError('Not yet implemented');
+  Future<void> removeItem(String imageName) async {
+    await _channel.invokeMethod<void>('virtualBackground.removeItem', {
+      'imageName': imageName,
+    });
   }
 
   /// Returns the currently active virtual background, or `null` if none.
   ///
   /// **Platform support:** Android ✅ iOS ✅ Windows ✅ macOS ✅
-  Future<ZoomVirtualBackgroundItem?> getSelectedItem() {
-    throw UnimplementedError('Not yet implemented');
+  Future<ZoomVirtualBackgroundItem?> getSelectedItem() async {
+    final result = await _channel.invokeMapMethod<String, dynamic>(
+      'virtualBackground.getSelectedItem',
+    );
+    if (result == null) return null;
+    return ZoomVirtualBackgroundItem(
+      imageName: result['imageName'] as String,
+      imagePath: result['imagePath'] as String,
+    );
   }
 }
 
@@ -727,42 +784,44 @@ class ZoomVirtualBackgroundHelper {
 class ZoomUserHelper {
   ZoomUserHelper(this._channel);
 
-  // ignore: unused_field
   final MethodChannel _channel;
 
   /// Transfers host role to the specified user.
   ///
   /// **Platform support:** Android ✅ iOS ✅ Windows ✅ macOS ✅
-  Future<void> makeHost(String userId) {
-    throw UnimplementedError('Not yet implemented');
+  Future<void> makeHost(String userId) async {
+    await _channel.invokeMethod<void>('user.makeHost', {'userId': userId});
   }
 
   /// Promotes the specified user to manager (co-host).
   ///
   /// **Platform support:** Android ✅ iOS ✅ Windows ✅ macOS ✅
-  Future<void> makeManager(String userId) {
-    throw UnimplementedError('Not yet implemented');
+  Future<void> makeManager(String userId) async {
+    await _channel.invokeMethod<void>('user.makeManager', {'userId': userId});
   }
 
   /// Revokes manager role from the specified user.
   ///
   /// **Platform support:** Android ✅ iOS ✅ Windows ✅ macOS ✅
-  Future<void> revokeManager(String userId) {
-    throw UnimplementedError('Not yet implemented');
+  Future<void> revokeManager(String userId) async {
+    await _channel.invokeMethod<void>('user.revokeManager', {'userId': userId});
   }
 
   /// Removes the specified user from the session.
   ///
   /// **Platform support:** Android ✅ iOS ✅ Windows ✅ macOS ✅
-  Future<void> removeUser(String userId) {
-    throw UnimplementedError('Not yet implemented');
+  Future<void> removeUser(String userId) async {
+    await _channel.invokeMethod<void>('user.removeUser', {'userId': userId});
   }
 
   /// Changes the display name of the specified user.
   ///
   /// **Platform support:** Android ✅ iOS ✅ Windows ✅ macOS ✅
-  Future<void> changeName(String name, String userId) {
-    throw UnimplementedError('Not yet implemented');
+  Future<void> changeName(String name, String userId) async {
+    await _channel.invokeMethod<void>('user.changeName', {
+      'name': name,
+      'userId': userId,
+    });
   }
 }
 
@@ -801,14 +860,23 @@ class ZoomVideoSdk {
     _recordingHelper = ZoomRecordingHelper(_channel);
     _virtualBackgroundHelper = ZoomVirtualBackgroundHelper(_channel);
     _userHelper = ZoomUserHelper(_channel);
+
+    _eventSubscription = _eventChannel.receiveBroadcastStream().listen((
+      dynamic event,
+    ) {
+      final map = Map<String, dynamic>.from(event as Map);
+      final zoomEvent = _decodeEvent(map);
+      if (zoomEvent != null) _eventController.add(zoomEvent);
+    });
   }
 
   final MethodChannel _channel;
-  // ignore: unused_field
   final EventChannel _eventChannel;
 
   final StreamController<ZoomEvent> _eventController =
       StreamController<ZoomEvent>.broadcast();
+
+  late final StreamSubscription<dynamic> _eventSubscription;
 
   late final ZoomAudioHelper _audioHelper;
   late final ZoomVideoHelper _videoHelper;
@@ -849,8 +917,12 @@ class ZoomVideoSdk {
   /// **Platform support:** Android ✅ iOS ✅ Windows ✅ macOS ✅
   ///
   /// Throws [PlatformException] if initialization fails.
-  Future<void> init(ZoomInitConfig config) {
-    throw UnimplementedError('Not yet implemented');
+  Future<void> init(ZoomInitConfig config) async {
+    await _channel.invokeMethod<void>('init', {
+      'domain': config.domain,
+      'enableLog': config.enableLog,
+      if (config.appGroupId != null) 'appGroupId': config.appGroupId,
+    });
   }
 
   // ---- Session ----
@@ -863,8 +935,23 @@ class ZoomVideoSdk {
   /// **Platform support:** Android ✅ iOS ✅ Windows ✅ macOS ✅
   ///
   /// Throws [PlatformException] on failure (invalid token, network error, etc.).
-  Future<void> joinSession(ZoomJoinSessionConfig config) {
-    throw UnimplementedError('Not yet implemented');
+  Future<void> joinSession(ZoomJoinSessionConfig config) async {
+    await _channel.invokeMethod<void>('joinSession', {
+      'sessionName': config.sessionName,
+      'userName': config.userName,
+      'token': config.token,
+      if (config.sessionPassword != null)
+        'sessionPassword': config.sessionPassword,
+      if (config.audioOptions != null)
+        'audioOptions': {
+          'connect': config.audioOptions!.connect,
+          'mute': config.audioOptions!.mute,
+        },
+      if (config.videoOptions != null)
+        'videoOptions': {'localVideoOn': config.videoOptions!.localVideoOn},
+      if (config.sessionIdleTimeoutMins != null)
+        'sessionIdleTimeoutMins': config.sessionIdleTimeoutMins,
+    });
   }
 
   /// Leaves the current session.
@@ -873,8 +960,10 @@ class ZoomVideoSdk {
   /// ended for all participants.
   ///
   /// **Platform support:** Android ✅ iOS ✅ Windows ✅ macOS ✅
-  Future<void> leaveSession({bool endSession = false}) {
-    throw UnimplementedError('Not yet implemented');
+  Future<void> leaveSession({bool endSession = false}) async {
+    await _channel.invokeMethod<void>('leaveSession', {
+      'endSession': endSession,
+    });
   }
 
   /// Returns information about the current active session.
@@ -882,8 +971,11 @@ class ZoomVideoSdk {
   /// **Platform support:** Android ✅ iOS ✅ Windows ✅ macOS ✅
   ///
   /// Throws [PlatformException] if no session is active.
-  Future<ZoomSessionInfo> getSessionInfo() {
-    throw UnimplementedError('Not yet implemented');
+  Future<ZoomSessionInfo> getSessionInfo() async {
+    final result = await _channel.invokeMapMethod<String, dynamic>(
+      'getSessionInfo',
+    );
+    return _decodeSessionInfo(result!);
   }
 
   // ---- Participants ----
@@ -891,22 +983,29 @@ class ZoomVideoSdk {
   /// Returns the local user.
   ///
   /// **Platform support:** Android ✅ iOS ✅ Windows ✅ macOS ✅
-  Future<ZoomUser> getMyself() {
-    throw UnimplementedError('Not yet implemented');
+  Future<ZoomUser> getMyself() async {
+    final result = await _channel.invokeMapMethod<String, dynamic>('getMyself');
+    return _decodeUser(result!);
   }
 
   /// Returns all users in the session (including self).
   ///
   /// **Platform support:** Android ✅ iOS ✅ Windows ✅ macOS ✅
-  Future<List<ZoomUser>> getAllUsers() {
-    throw UnimplementedError('Not yet implemented');
+  Future<List<ZoomUser>> getAllUsers() async {
+    final result = await _channel.invokeListMethod<Map>('getAllUsers');
+    return (result ?? [])
+        .map((m) => _decodeUser(Map<String, dynamic>.from(m)))
+        .toList();
   }
 
   /// Returns all remote users in the session (excluding self).
   ///
   /// **Platform support:** Android ✅ iOS ✅ Windows ✅ macOS ✅
-  Future<List<ZoomUser>> getRemoteUsers() {
-    throw UnimplementedError('Not yet implemented');
+  Future<List<ZoomUser>> getRemoteUsers() async {
+    final result = await _channel.invokeListMethod<Map>('getRemoteUsers');
+    return (result ?? [])
+        .map((m) => _decodeUser(Map<String, dynamic>.from(m)))
+        .toList();
   }
 
   // ---- Event streams ----
@@ -994,6 +1093,7 @@ class ZoomVideoSdk {
   ///
   /// **Platform support:** Android ✅ iOS ✅ Windows ✅ macOS ✅
   void dispose() {
+    _eventSubscription.cancel();
     _eventController.close();
   }
 }
@@ -1011,4 +1111,132 @@ void _assertDesktopOnly(String methodName) {
       'See docs/DART_API_DESIGN.md for platform support details.',
     );
   }
+}
+
+// ---------------------------------------------------------------------------
+// Deserialization helpers (private)
+// ---------------------------------------------------------------------------
+
+ZoomEvent? _decodeEvent(Map<String, dynamic> map) {
+  final type = map['eventType'] as String;
+  final data = Map<String, dynamic>.from(map['data'] as Map? ?? {});
+
+  return switch (type) {
+    'sessionJoined' => const SessionJoinedEvent(),
+    'sessionLeft' => const SessionLeftEvent(),
+    'userJoined' => UserJoinedEvent(
+      users: _decodeUserList(data['users'] as List),
+    ),
+    'userLeft' => UserLeftEvent(users: _decodeUserList(data['users'] as List)),
+    'userVideoStatusChanged' => UserVideoStatusChangedEvent(
+      user: _decodeUser(Map<String, dynamic>.from(data['user'] as Map)),
+    ),
+    'userAudioStatusChanged' => UserAudioStatusChangedEvent(
+      user: _decodeUser(Map<String, dynamic>.from(data['user'] as Map)),
+    ),
+    'userActiveAudioChanged' => UserActiveAudioChangedEvent(
+      activeUsers: _decodeUserList(data['activeUsers'] as List),
+    ),
+    'chatMessageReceived' => ChatMessageReceivedEvent(
+      message: _decodeChatMessage(
+        Map<String, dynamic>.from(data['message'] as Map),
+      ),
+    ),
+    'userShareStatusChanged' => UserShareStatusChangedEvent(
+      user: _decodeUser(Map<String, dynamic>.from(data['user'] as Map)),
+      status: ZoomShareStatus.values.firstWhere(
+        (s) => s.name == data['status'],
+        orElse: () => ZoomShareStatus.stopped,
+      ),
+    ),
+    'userHostChanged' => UserHostChangedEvent(
+      newHost: _decodeUser(Map<String, dynamic>.from(data['newHost'] as Map)),
+    ),
+    'userManagerChanged' => UserManagerChangedEvent(
+      user: _decodeUser(Map<String, dynamic>.from(data['user'] as Map)),
+      isManager: data['isManager'] as bool,
+    ),
+    'userNameChanged' => UserNameChangedEvent(
+      user: _decodeUser(Map<String, dynamic>.from(data['user'] as Map)),
+    ),
+    'sessionNeedPassword' => const SessionNeedPasswordEvent(),
+    'sessionPasswordWrong' => const SessionPasswordWrongEvent(),
+    'error' => ErrorEvent(
+      errorCode: ZoomErrorCode.values.firstWhere(
+        (c) => c.name == data['errorCode'],
+        orElse: () => ZoomErrorCode.unknown,
+      ),
+      message: data['message'] as String?,
+    ),
+    _ => null,
+  };
+}
+
+List<ZoomUser> _decodeUserList(List<dynamic> list) {
+  return list
+      .map((u) => _decodeUser(Map<String, dynamic>.from(u as Map)))
+      .toList();
+}
+
+ZoomUser _decodeUser(Map<String, dynamic> map) {
+  return ZoomUser(
+    userId: map['userId'] as String,
+    userName: map['userName'] as String,
+    isHost: map['isHost'] as bool? ?? false,
+    isManager: map['isManager'] as bool? ?? false,
+    audioStatus: map['audioStatus'] != null
+        ? _decodeAudioStatus(
+            Map<String, dynamic>.from(map['audioStatus'] as Map),
+          )
+        : null,
+    videoStatus: map['videoStatus'] != null
+        ? _decodeVideoStatus(
+            Map<String, dynamic>.from(map['videoStatus'] as Map),
+          )
+        : null,
+  );
+}
+
+ZoomAudioStatus _decodeAudioStatus(Map<String, dynamic> map) {
+  return ZoomAudioStatus(
+    isMuted: map['isMuted'] as bool,
+    isTalking: map['isTalking'] as bool,
+    audioType: ZoomAudioType.values.firstWhere(
+      (t) => t.name == map['audioType'],
+      orElse: () => ZoomAudioType.none,
+    ),
+  );
+}
+
+ZoomVideoStatus _decodeVideoStatus(Map<String, dynamic> map) {
+  return ZoomVideoStatus(
+    isOn: map['isOn'] as bool,
+    hasSource: map['hasSource'] as bool,
+  );
+}
+
+ZoomSessionInfo _decodeSessionInfo(Map<String, dynamic> map) {
+  return ZoomSessionInfo(
+    sessionName: map['sessionName'] as String,
+    sessionId: map['sessionId'] as String,
+    sessionPassword: map['sessionPassword'] as String?,
+    host: map['host'] != null
+        ? _decodeUser(Map<String, dynamic>.from(map['host'] as Map))
+        : null,
+  );
+}
+
+ZoomChatMessage _decodeChatMessage(Map<String, dynamic> map) {
+  return ZoomChatMessage(
+    content: map['content'] as String,
+    senderUser: _decodeUser(
+      Map<String, dynamic>.from(map['senderUser'] as Map),
+    ),
+    receiverUser: map['receiverUser'] != null
+        ? _decodeUser(Map<String, dynamic>.from(map['receiverUser'] as Map))
+        : null,
+    isChatToAll: map['isChatToAll'] as bool,
+    isSelfSend: map['isSelfSend'] as bool,
+    timestamp: DateTime.fromMillisecondsSinceEpoch(map['timestamp'] as int),
+  );
 }

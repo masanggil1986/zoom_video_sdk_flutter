@@ -3,6 +3,8 @@
 *.log
 *.pyc
 *.swp
+*.swiftinterface
+*.private.swiftinterface
 .DS_Store
 .atom/
 .build/

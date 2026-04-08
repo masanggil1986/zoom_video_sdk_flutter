@@ -15,7 +15,7 @@ EXTERNAL SOURCES:
 
 SPEC CHECKSUMS:
   FlutterMacOS: d0db08ddef1a9af05a5ec4b724367152bb0500b1
-  zoom_video_sdk_flutter: 7d7774a7e24f52e4595aa13ce5b852b553c53b7d
+  zoom_video_sdk_flutter: e78fad7003796ba8a58f147cfa7fdd1b2c0ee386
 
 PODFILE CHECKSUM: 54d867c82ac51cbd61b565781b9fada492027009
 

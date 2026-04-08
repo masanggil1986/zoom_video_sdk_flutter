@@ -5,26 +5,39 @@
 Pod::Spec.new do |s|
   s.name             = 'zoom_video_sdk_flutter'
   s.version          = '0.0.1'
-  s.summary          = 'A new Flutter plugin project.'
+  s.summary          = 'Flutter plugin for Zoom Video SDK (macOS).'
   s.description      = <<-DESC
-A new Flutter plugin project.
+Flutter plugin wrapping the Zoom Video SDK for macOS.
+Download the ZoomVideoSDK.xcframework from Zoom Marketplace
+and place it in macos/Frameworks/ before building.
                        DESC
   s.homepage         = 'http://example.com'
   s.license          = { :file => '../LICENSE' }
   s.author           = { 'Your Company' => 'email@example.com' }
 
   s.source           = { :path => '.' }
-  s.source_files = 'Classes/**/*'
+  s.source_files = 'Classes/**/*.swift'
 
-  # If your plugin requires a privacy manifest, for example if it collects user
-  # data, update the PrivacyInfo.xcprivacy file to describe your plugin's
-  # privacy impact, and then uncomment this line. For more information,
-  # see https://developer.apple.com/documentation/bundleresources/privacy_manifest_files
-  # s.resource_bundles = {'zoom_video_sdk_flutter_privacy' => ['Resources/PrivacyInfo.xcprivacy']}
+  s.vendored_frameworks = Dir['Frameworks/*.framework']
+  s.vendored_libraries  = Dir['Frameworks/lib*.dylib', 'Frameworks/VideoSDK.dylib']
+  s.resources           = Dir['Frameworks/*.bundle', 'Frameworks/*.app']
+  s.preserve_paths      = 'Frameworks/**'
+
+  # VideoSDK.dylib는 lib 접두사가 없어 vendored_libraries로 처리 불가 — 직접 링크
+  s.user_target_xcconfig = {
+    'LD_RUNPATH_SEARCH_PATHS' => '$(inherited) @executable_path/../Frameworks',
+  }
 
   s.dependency 'FlutterMacOS'
 
-  s.platform = :osx, '10.11'
-  s.pod_target_xcconfig = { 'DEFINES_MODULE' => 'YES' }
+  s.platform = :osx, '10.15'
+  s.pod_target_xcconfig = {
+    'DEFINES_MODULE' => 'YES',
+    'LD_RUNPATH_SEARCH_PATHS' => '$(inherited) @executable_path/../Frameworks @loader_path/../Frameworks',
+    'FRAMEWORK_SEARCH_PATHS' => '$(inherited) "${PODS_ROOT}/../.symlinks/plugins/zoom_video_sdk_flutter/macos/Frameworks" "${PODS_TARGET_SRCROOT}/Frameworks"',
+    'LIBRARY_SEARCH_PATHS' => '$(inherited) "${PODS_ROOT}/../.symlinks/plugins/zoom_video_sdk_flutter/macos/Frameworks" "${PODS_TARGET_SRCROOT}/Frameworks" "${BUILT_PRODUCTS_DIR}"',
+    'OTHER_LDFLAGS' => '$(inherited)',
+    'SWIFT_INCLUDE_PATHS' => '$(inherited) "${PODS_ROOT}/../.symlinks/plugins/zoom_video_sdk_flutter/macos/Frameworks" "${PODS_TARGET_SRCROOT}/Frameworks"',
+  }
   s.swift_version = '5.0'
 end
