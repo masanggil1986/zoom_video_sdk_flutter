@@ -24,6 +24,7 @@ class _JoinScreenState extends State<JoinScreen> {
 
   bool _audioConnect = true;
   bool _audioMute = false;
+  bool _autoAdjustSpeakerVolume = true;
   bool _videoOn = false;
   bool _isJoining = false;
 
@@ -84,6 +85,7 @@ class _JoinScreenState extends State<JoinScreen> {
           audioOptions: ZoomAudioOptions(
             connect: _audioConnect,
             mute: _audioMute,
+            autoAdjustSpeakerVolume: _autoAdjustSpeakerVolume,
           ),
           videoOptions: ZoomVideoOptions(localVideoOn: _videoOn),
           sessionIdleTimeoutMins: idleMins,
@@ -195,6 +197,12 @@ class _JoinScreenState extends State<JoinScreen> {
                       title: const Text('Audio: start muted'),
                       value: _audioMute,
                       onChanged: (v) => setState(() => _audioMute = v),
+                    ),
+                    SwitchListTile(
+                      title: const Text('Audio: auto-adjust speaker volume'),
+                      value: _autoAdjustSpeakerVolume,
+                      onChanged: (v) =>
+                          setState(() => _autoAdjustSpeakerVolume = v),
                     ),
                     SwitchListTile(
                       title: const Text('Video: camera on at join'),

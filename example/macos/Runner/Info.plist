@@ -28,5 +28,9 @@
 	<string>MainMenu</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Required to send video during Zoom sessions.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Required to send audio during Zoom sessions.</string>
 </dict>
 </plist>

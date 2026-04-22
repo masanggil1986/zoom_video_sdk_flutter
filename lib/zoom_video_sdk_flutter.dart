@@ -49,8 +49,29 @@ enum ZoomAudioType { voip, telephony, none }
 /// Screen sharing status.
 enum ZoomShareStatus { started, stopped, paused }
 
+/// Type of a shareable source.
+enum ZoomShareSourceType { screen, window }
+
 /// Video rendering aspect mode.
 enum ZoomVideoAspectMode { panAndScan, letterBox }
+
+/// Camera video quality preference mode.
+///
+/// Web SDK's `stream.updateSharedVideoQuality` has no direct native equivalent;
+/// this controls the *camera* video quality preference on desktop.
+enum ZoomVideoPreferenceMode {
+  /// Balanced between sharpness and smoothness.
+  balance,
+
+  /// Prioritize clarity — may reduce frame rate.
+  sharpness,
+
+  /// Prioritize smooth motion — may reduce resolution.
+  smoothness,
+
+  /// Custom frame-rate bounds (supply `minimumFrameRate`/`maximumFrameRate`).
+  custom,
+}
 
 /// Noise suppression level.
 ///
@@ -95,13 +116,21 @@ class ZoomInitConfig {
 /// Audio options for [ZoomJoinSessionConfig].
 @immutable
 class ZoomAudioOptions {
-  const ZoomAudioOptions({this.connect = true, this.mute = false});
+  const ZoomAudioOptions({
+    this.connect = true,
+    this.mute = false,
+    this.autoAdjustSpeakerVolume = true,
+  });
 
   /// Automatically connect audio on join.
   final bool connect;
 
   /// Start with microphone muted.
   final bool mute;
+
+  /// When `true`, the SDK automatically raises speaker volume if it is muted
+  /// or too low on join. macOS/Windows only.
+  final bool autoAdjustSpeakerVolume;
 }
 
 /// Video options for [ZoomJoinSessionConfig].
@@ -266,6 +295,50 @@ class ZoomCameraDevice {
 
   final String deviceId;
   final String deviceName;
+}
+
+/// Options applied when starting a share.
+///
+/// Native macOS/Windows SDKs only expose these two flags for share quality —
+/// there is no direct resolution setting.
+@immutable
+class ZoomShareOption {
+  const ZoomShareOption({
+    this.withDeviceAudio = false,
+    this.optimizeForSharedVideo = false,
+  });
+
+  /// Include system (device) audio in the share stream. Desktop only.
+  final bool withDeviceAudio;
+
+  /// Prioritize smooth motion over still-frame clarity — use when sharing
+  /// video content. Trades detail for higher frame rate.
+  final bool optimizeForSharedVideo;
+
+  Map<String, dynamic> toMap() => {
+    'withDeviceAudio': withDeviceAudio,
+    'optimizeForSharedVideo': optimizeForSharedVideo,
+  };
+}
+
+/// A shareable source (monitor or application window). Desktop only.
+@immutable
+class ZoomShareSource {
+  const ZoomShareSource({
+    required this.sourceId,
+    required this.name,
+    required this.type,
+  });
+
+  /// Opaque ID — pass back to [ZoomShareHelper.startShareScreen] (for
+  /// [ZoomShareSourceType.screen]) or [ZoomShareHelper.startShareView]
+  /// (for [ZoomShareSourceType.window]).
+  final String sourceId;
+
+  /// Display name (monitor label or window title).
+  final String name;
+
+  final ZoomShareSourceType type;
 }
 
 /// A virtual background item.
@@ -544,6 +617,39 @@ class ZoomVideoHelper {
     await _channel.invokeMethod<void>('video.switchCamera');
   }
 
+  /// Sets the camera video quality preference (balance/sharpness/smoothness
+  /// or custom frame-rate bounds).
+  ///
+  /// For [ZoomVideoPreferenceMode.custom], [minimumFrameRate] and
+  /// [maximumFrameRate] must be in `[0, 30]` and `min <= max`.
+  ///
+  /// **Platform support:** Android ✅ iOS ✅ Windows ✅ macOS ✅
+  Future<void> setVideoQualityPreference(
+    ZoomVideoPreferenceMode mode, {
+    int minimumFrameRate = 0,
+    int maximumFrameRate = 0,
+  }) async {
+    await _channel.invokeMethod<void>('video.setVideoQualityPreference', {
+      'mode': mode.name,
+      'minimumFrameRate': minimumFrameRate,
+      'maximumFrameRate': maximumFrameRate,
+    });
+  }
+
+  /// Selects a camera by device ID. Desktop only.
+  ///
+  /// On mobile, use [switchCamera] to toggle front/back.
+  ///
+  /// **Platform support:** Android ❌ iOS ❌ Windows ✅ macOS ✅
+  ///
+  /// Throws [UnimplementedError] on Android and iOS.
+  Future<void> selectCamera(String deviceId) async {
+    _assertDesktopOnly('selectCamera()');
+    await _channel.invokeMethod<void>('video.selectCamera', {
+      'deviceId': deviceId,
+    });
+  }
+
   /// Returns the list of available cameras. Desktop only.
   ///
   /// **Platform support:** Android ❌ iOS ❌ Windows ✅ macOS ✅
@@ -572,12 +678,44 @@ class ZoomShareHelper {
 
   /// Starts screen sharing.
   ///
+  /// On desktop, pass [monitorId] from [getShareSourceList] to pick a specific
+  /// display. If omitted, the main display is used.
+  ///
   /// On iOS, requires `appGroupId` in [ZoomInitConfig] and a Broadcast Upload
   /// Extension target. On Android, requires MediaProjection permission.
   ///
   /// **Platform support:** Android ✅ iOS ✅ Windows ✅ macOS ✅
-  Future<void> startShareScreen() async {
-    await _channel.invokeMethod<void>('share.startShareScreen');
+  Future<void> startShareScreen({
+    String? monitorId,
+    ZoomShareOption? option,
+  }) async {
+    await _channel.invokeMethod<void>('share.startShareScreen', {
+      'monitorId': ?monitorId,
+      if (option != null) 'option': option.toMap(),
+    });
+  }
+
+  /// Enumerates shareable monitors and application windows. Desktop only.
+  ///
+  /// **Platform support:** Android ❌ iOS ❌ Windows ✅ macOS ✅
+  ///
+  /// Throws [UnimplementedError] on Android and iOS.
+  Future<List<ZoomShareSource>> getShareSourceList() async {
+    _assertDesktopOnly('getShareSourceList()');
+    final result = await _channel.invokeListMethod<Map>(
+      'share.getShareSourceList',
+    );
+    return (result ?? []).map((m) {
+      final map = Map<String, dynamic>.from(m);
+      return ZoomShareSource(
+        sourceId: map['sourceId'] as String,
+        name: map['name'] as String,
+        type: ZoomShareSourceType.values.firstWhere(
+          (t) => t.name == map['type'],
+          orElse: () => ZoomShareSourceType.window,
+        ),
+      );
+    }).toList();
   }
 
   /// Shares a specific application window by its handle/ID. Desktop only.
@@ -585,10 +723,14 @@ class ZoomShareHelper {
   /// **Platform support:** Android ❌ iOS ❌ Windows ✅ macOS ✅
   ///
   /// Throws [UnimplementedError] on Android and iOS.
-  Future<void> startShareView(String windowId) async {
+  Future<void> startShareView(
+    String windowId, {
+    ZoomShareOption? option,
+  }) async {
     _assertDesktopOnly('startShareView()');
     await _channel.invokeMethod<void>('share.startShareView', {
       'windowId': windowId,
+      if (option != null) 'option': option.toMap(),
     });
   }
 
@@ -605,6 +747,20 @@ class ZoomShareHelper {
   /// **Platform support:** Android ❌ iOS ❌ Windows ✅ macOS ✅
   ///
   /// Throws [UnimplementedError] on Android and iOS.
+  /// Toggles "optimize for video" on an active share — prioritizes frame rate
+  /// over still-frame detail.
+  ///
+  /// **Precondition:** a screen or window share is currently running.
+  /// Returns an error otherwise.
+  ///
+  /// **Platform support:** Android ❌ iOS ❌ Windows ✅ macOS ✅
+  Future<void> enableOptimizeForSharedVideo(bool enable) async {
+    _assertDesktopOnly('enableOptimizeForSharedVideo()');
+    await _channel.invokeMethod<void>('share.enableOptimizeForSharedVideo', {
+      'enable': enable,
+    });
+  }
+
   Future<void> enableShareDeviceAudio(bool enable) async {
     _assertDesktopOnly('enableShareDeviceAudio()');
     await _channel.invokeMethod<void>('share.enableShareDeviceAudio', {
@@ -946,6 +1102,8 @@ class ZoomVideoSdk {
         'audioOptions': {
           'connect': config.audioOptions!.connect,
           'mute': config.audioOptions!.mute,
+          'autoAdjustSpeakerVolume':
+              config.audioOptions!.autoAdjustSpeakerVolume,
         },
       if (config.videoOptions != null)
         'videoOptions': {'localVideoOn': config.videoOptions!.localVideoOn},

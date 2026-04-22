@@ -70,16 +70,24 @@ public class ZoomVideoSdkFlutterPlugin: NSObject, FlutterPlugin {
             handleVideoSwitchCamera(result: result)
         case "video.getCameraList":
             handleVideoGetCameraList(result: result)
+        case "video.selectCamera":
+            handleVideoSelectCamera(args: args, result: result)
+        case "video.setVideoQualityPreference":
+            handleVideoSetQualityPreference(args: args, result: result)
 
         // Share
         case "share.startShareScreen":
-            handleShareStartScreen(result: result)
+            handleShareStartScreen(args: args, result: result)
         case "share.startShareView":
             handleShareStartView(args: args, result: result)
         case "share.stopShare":
             handleShareStop(result: result)
         case "share.enableShareDeviceAudio":
             handleShareEnableDeviceAudio(args: args, result: result)
+        case "share.getShareSourceList":
+            handleShareGetSourceList(result: result)
+        case "share.enableOptimizeForSharedVideo":
+            handleShareEnableOptimizeForVideo(args: args, result: result)
 
         // Chat
         case "chat.sendChatToAll":
@@ -192,6 +200,8 @@ private extension ZoomVideoSdkFlutterPlugin {
             let audio = ZMVideoSDKAudioOption()
             audio.connect = audioOpts["connect"] as? Bool ?? true
             audio.mute = audioOpts["mute"] as? Bool ?? false
+            audio.autoAdjustSpeakerVolume =
+                audioOpts["autoAdjustSpeakerVolume"] as? Bool ?? true
             ctx.audioOption = audio
         }
 
@@ -416,21 +426,122 @@ private extension ZoomVideoSdkFlutterPlugin {
         let cameras = sdk?.getVideoHelper().getCameraList() ?? []
         result(cameras.map { ZoomSerializer.serializeCameraDevice($0) })
     }
+
+    func handleVideoSelectCamera(args: [String: Any]?, result: @escaping FlutterResult) {
+        guard let deviceId = args?["deviceId"] as? String else {
+            result(flutterError("INVALID_ARGS", "deviceId required"))
+            return
+        }
+        let success = sdk?.getVideoHelper().selectCamera(deviceId) ?? false
+        if success {
+            result(nil)
+        } else {
+            result(flutterError("VIDEO_ERROR", "selectCamera failed"))
+        }
+    }
+
+    func handleVideoSetQualityPreference(args: [String: Any]?, result: @escaping FlutterResult) {
+        let modeStr = args?["mode"] as? String ?? "balance"
+        let mode: ZMVideoSDKVideoPreferenceMode
+        switch modeStr {
+        case "sharpness": mode = ZMVideoSDKVideoPreferenceMode_Sharpness
+        case "smoothness": mode = ZMVideoSDKVideoPreferenceMode_Smoothness
+        case "custom": mode = ZMVideoSDKVideoPreferenceMode_Custom
+        default: mode = ZMVideoSDKVideoPreferenceMode_Balance
+        }
+        let minFps = UInt32(max(0, args?["minimumFrameRate"] as? Int ?? 0))
+        let maxFps = UInt32(max(0, args?["maximumFrameRate"] as? Int ?? 0))
+
+        let pref = ZMVideoSDKPreferenceSetting()
+        pref.mode = mode
+        pref.minimumFrameRate = minFps
+        pref.maximumFrameRate = maxFps
+
+        let err = sdk?.getVideoHelper().setVideoQualityPreference(pref)
+        if err == ZMVideoSDKErrors_Success {
+            result(nil)
+        } else {
+            result(flutterError("VIDEO_ERROR", "setVideoQualityPreference failed: \(String(describing: err))"))
+        }
+    }
 }
 
 // MARK: - Share Handlers
 
 private extension ZoomVideoSdkFlutterPlugin {
 
-    func handleShareStartScreen(result: @escaping FlutterResult) {
-        let mainDisplayId = CGMainDisplayID()
-        let option = ZMVideoSDKShareOption()
-        let err = sdk?.getShareHelper().startShareScreen(mainDisplayId, shareOption: option)
+    func handleShareStartScreen(args: [String: Any]?, result: @escaping FlutterResult) {
+        let displayId: CGDirectDisplayID
+        if let monitorIdStr = args?["monitorId"] as? String,
+           let parsed = UInt32(monitorIdStr) {
+            displayId = parsed
+        } else {
+            displayId = CGMainDisplayID()
+        }
+        let option = buildShareOption(args?["option"] as? [String: Any])
+        let err = sdk?.getShareHelper().startShareScreen(displayId, shareOption: option)
         if err == ZMVideoSDKErrors_Success {
             result(nil)
         } else {
             result(flutterError("SHARE_ERROR", "startShareScreen failed: \(String(describing: err))"))
         }
+    }
+
+    func buildShareOption(_ map: [String: Any]?) -> ZMVideoSDKShareOption {
+        let option = ZMVideoSDKShareOption()
+        option.isWithDeviceAudio = (map?["withDeviceAudio"] as? Bool) ?? false
+        option.isOptimizeForSharedVideo = (map?["optimizeForSharedVideo"] as? Bool) ?? false
+        return option
+    }
+
+    func handleShareGetSourceList(result: @escaping FlutterResult) {
+        var sources: [[String: Any]] = []
+
+        // Monitors (NSScreen → CGDirectDisplayID)
+        for (idx, screen) in NSScreen.screens.enumerated() {
+            let key = NSDeviceDescriptionKey("NSScreenNumber")
+            guard let number = screen.deviceDescription[key] as? NSNumber else { continue }
+            let displayId = number.uint32Value
+            let name = screen.localizedName.isEmpty
+                ? "Display \(idx + 1)"
+                : screen.localizedName
+            sources.append([
+                "sourceId": String(displayId),
+                "name": name,
+                "type": "screen",
+            ])
+        }
+
+        // Windows (CGWindowListCopyWindowInfo, on-screen, excluding desktop)
+        let options: CGWindowListOption = [.optionOnScreenOnly, .excludeDesktopElements]
+        if let windowList = CGWindowListCopyWindowInfo(options, kCGNullWindowID) as? [[String: Any]] {
+            for info in windowList {
+                guard
+                    let windowNumber = info[kCGWindowNumber as String] as? NSNumber,
+                    let layer = info[kCGWindowLayer as String] as? NSNumber,
+                    layer.intValue == 0
+                else { continue }
+                let owner = info[kCGWindowOwnerName as String] as? String ?? ""
+                let title = info[kCGWindowName as String] as? String ?? ""
+                let label: String
+                if !title.isEmpty && !owner.isEmpty {
+                    label = "\(owner) — \(title)"
+                } else if !title.isEmpty {
+                    label = title
+                } else if !owner.isEmpty {
+                    label = owner
+                } else {
+                    continue
+                }
+                sources.append([
+                    "sourceId": String(windowNumber.uint32Value),
+                    "name": label,
+                    "type": "window",
+                ])
+            }
+        }
+
+        result(sources)
     }
 
     func handleShareStartView(args: [String: Any]?, result: @escaping FlutterResult) {
@@ -439,7 +550,7 @@ private extension ZoomVideoSdkFlutterPlugin {
             result(flutterError("INVALID_ARGS", "windowId required"))
             return
         }
-        let option = ZMVideoSDKShareOption()
+        let option = buildShareOption(args?["option"] as? [String: Any])
         let err = sdk?.getShareHelper().startShareView(CGWindowID(windowId), shareOption: option)
         if err == ZMVideoSDKErrors_Success {
             result(nil)
@@ -454,6 +565,16 @@ private extension ZoomVideoSdkFlutterPlugin {
             result(nil)
         } else {
             result(flutterError("SHARE_ERROR", "stopShare failed: \(String(describing: err))"))
+        }
+    }
+
+    func handleShareEnableOptimizeForVideo(args: [String: Any]?, result: @escaping FlutterResult) {
+        let enable = args?["enable"] as? Bool ?? false
+        let err = sdk?.getShareHelper().enableOptimize(forSharedVideo: enable)
+        if err == ZMVideoSDKErrors_Success {
+            result(nil)
+        } else {
+            result(flutterError("SHARE_ERROR", "enableOptimizeForSharedVideo failed: \(String(describing: err))"))
         }
     }
 

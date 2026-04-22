@@ -27,7 +27,6 @@ class _SessionScreenState extends State<SessionScreen> {
   List<ZoomUser> _users = [];
 
   final _chatMessageCtrl = TextEditingController();
-  final _shareWindowCtrl = TextEditingController();
   final _vbPathCtrl = TextEditingController();
   final _vbRemoveCtrl = TextEditingController();
 
@@ -35,6 +34,10 @@ class _SessionScreenState extends State<SessionScreen> {
   ZoomNoiseSuppression _noiseLevel = ZoomNoiseSuppression.auto_;
   bool _micOriginalInput = false;
   bool _shareDeviceAudio = false;
+  bool _shareWithDeviceAudio = false;
+  bool _shareOptimizeForVideo = false;
+  ZoomVideoPreferenceMode _videoPreferenceMode =
+      ZoomVideoPreferenceMode.balance;
 
   @override
   void initState() {
@@ -50,7 +53,6 @@ class _SessionScreenState extends State<SessionScreen> {
   void dispose() {
     _eventsSub?.cancel();
     _chatMessageCtrl.dispose();
-    _shareWindowCtrl.dispose();
     _vbPathCtrl.dispose();
     _vbRemoveCtrl.dispose();
     super.dispose();
@@ -58,23 +60,31 @@ class _SessionScreenState extends State<SessionScreen> {
 
   // ---- Event handling ----
 
-  void _onEvent(ZoomEvent e) {
+  void _log(String entry) {
     if (!mounted) return;
     setState(() {
-      _logEntries.insert(0, formatEvent(e));
+      _logEntries.insert(0, entry);
       if (_logEntries.length > _logCap) _logEntries.removeLast();
     });
+  }
+
+  void _onEvent(ZoomEvent e) {
+    _log(formatEvent(e));
     switch (e) {
       case SessionLeftEvent():
         if (mounted) Navigator.of(context).maybePop();
       case UserJoinedEvent():
       case UserLeftEvent():
-      case UserVideoStatusChangedEvent():
-      case UserAudioStatusChangedEvent():
-      case UserHostChangedEvent():
-      case UserManagerChangedEvent():
-      case UserNameChangedEvent():
         _refreshUsers();
+      case UserVideoStatusChangedEvent(:final user):
+      case UserAudioStatusChangedEvent(:final user):
+      case UserNameChangedEvent(:final user):
+        _applyUserUpdate(user);
+      case UserHostChangedEvent(:final newHost):
+        _applyUserUpdate(newHost);
+        _refreshUsers();
+      case UserManagerChangedEvent(:final user):
+        _applyUserUpdate(user);
       case SessionJoinedEvent():
       case SessionNeedPasswordEvent():
       case SessionPasswordWrongEvent():
@@ -84,6 +94,26 @@ class _SessionScreenState extends State<SessionScreen> {
       case ErrorEvent():
         break;
     }
+  }
+
+  /// Replace the matching user in [_users] (and [_myself] if it's self) with
+  /// the version carried by the event — avoids relying on a re-fetch that may
+  /// return stale data.
+  void _applyUserUpdate(ZoomUser updated) {
+    if (!mounted) return;
+    setState(() {
+      final idx = _users.indexWhere((u) => u.userId == updated.userId);
+      if (idx >= 0) {
+        _users = [
+          ..._users.sublist(0, idx),
+          updated,
+          ..._users.sublist(idx + 1),
+        ];
+      } else {
+        _users = [..._users, updated];
+      }
+      if (_myself?.userId == updated.userId) _myself = updated;
+    });
   }
 
   // ---- Fetches ----
@@ -101,7 +131,18 @@ class _SessionScreenState extends State<SessionScreen> {
   Future<void> _refreshUsers() async {
     final users = await _runQuery('getAllUsers', widget.sdk.getAllUsers);
     if (!mounted || users == null) return;
-    setState(() => _users = users);
+    final myId = _myself?.userId;
+    setState(() {
+      _users = users;
+      if (myId != null) {
+        for (final u in users) {
+          if (u.userId == myId) {
+            _myself = u;
+            break;
+          }
+        }
+      }
+    });
   }
 
   // ---- Action wrappers ----
@@ -109,16 +150,11 @@ class _SessionScreenState extends State<SessionScreen> {
   Future<void> _runAction(String label, Future<void> Function() action) async {
     try {
       await action();
-      if (!mounted) return;
-      _showSnack('$label: ok');
+      _log('→ $label: ok');
     } on PlatformException catch (e) {
-      if (!mounted) return;
-      _showSnack(
-        '$label: ${e.code}${e.message != null ? ": ${e.message}" : ""}',
-      );
+      _log('✗ $label: ${e.code}${e.message != null ? ": ${e.message}" : ""}');
     } on UnimplementedError catch (e) {
-      if (!mounted) return;
-      _showSnack('$label: ${e.message ?? "not supported on this platform"}');
+      _log('✗ $label: ${e.message ?? "not supported on this platform"}');
     }
   }
 
@@ -126,21 +162,11 @@ class _SessionScreenState extends State<SessionScreen> {
     try {
       return await query();
     } on PlatformException catch (e) {
-      if (!mounted) return null;
-      _showSnack(
-        '$label: ${e.code}${e.message != null ? ": ${e.message}" : ""}',
-      );
+      _log('✗ $label: ${e.code}${e.message != null ? ": ${e.message}" : ""}');
     } on UnimplementedError catch (e) {
-      if (!mounted) return null;
-      _showSnack('$label: ${e.message ?? "not supported on this platform"}');
+      _log('✗ $label: ${e.message ?? "not supported on this platform"}');
     }
     return null;
-  }
-
-  void _showSnack(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), duration: const Duration(seconds: 2)),
-    );
   }
 
   // ---- Leave ----
@@ -302,6 +328,8 @@ class _SessionScreenState extends State<SessionScreen> {
 
   Widget _participantTile(ZoomUser user) {
     final audio = user.audioStatus;
+    final audioConnected =
+        audio != null && audio.audioType != ZoomAudioType.none;
     final video = user.videoStatus;
     return ListTile(
       dense: true,
@@ -317,9 +345,9 @@ class _SessionScreenState extends State<SessionScreen> {
           if (user.isHost) _badge('H', Colors.blue),
           if (user.isManager) _badge('M', Colors.green),
           Icon(
-            audio == null
-                ? Icons.mic_off_outlined
-                : (audio.isMuted ? Icons.mic_off : Icons.mic),
+            audioConnected
+                ? (audio.isMuted ? Icons.mic_off : Icons.mic)
+                : Icons.mic_off_outlined,
             size: 18,
             color: audio?.isTalking == true ? Colors.green : null,
           ),
@@ -406,9 +434,27 @@ class _SessionScreenState extends State<SessionScreen> {
 
   Widget _audioSection() {
     final myId = _myself?.userId;
+    final audio = _myself?.audioStatus;
+    // Zoom SDK may return AudioStatus with audioType=none after stopAudio;
+    // treat that as "not started" so Start audio re-enables.
+    final audioStarted = audio != null && audio.audioType != ZoomAudioType.none;
+    final isMuted = audio?.isMuted ?? true;
     return Card(
       child: ExpansionTile(
-        title: const Text('Audio'),
+        title: Row(
+          children: [
+            const Text('Audio'),
+            const SizedBox(width: 8),
+            Icon(
+              audioStarted
+                  ? (isMuted ? Icons.mic_off : Icons.mic)
+                  : Icons.headset_off,
+              size: 16,
+              color: audioStarted && !isMuted ? Colors.green : null,
+            ),
+          ],
+        ),
+        initiallyExpanded: true,
         children: [
           Padding(
             padding: const EdgeInsets.all(12),
@@ -419,37 +465,45 @@ class _SessionScreenState extends State<SessionScreen> {
                   spacing: 8,
                   runSpacing: 4,
                   children: [
-                    ElevatedButton(
-                      onPressed: () => _runAction(
-                        'startAudio',
-                        widget.sdk.audioHelper.startAudio,
-                      ),
-                      child: const Text('Start audio'),
+                    ElevatedButton.icon(
+                      icon: const Icon(Icons.headset),
+                      label: const Text('Start audio'),
+                      onPressed: audioStarted
+                          ? null
+                          : () => _runAction(
+                              'startAudio',
+                              widget.sdk.audioHelper.startAudio,
+                            ),
                     ),
-                    ElevatedButton(
-                      onPressed: () => _runAction(
-                        'stopAudio',
-                        widget.sdk.audioHelper.stopAudio,
-                      ),
-                      child: const Text('Stop audio'),
+                    ElevatedButton.icon(
+                      icon: const Icon(Icons.headset_off),
+                      label: const Text('Stop audio'),
+                      onPressed: !audioStarted
+                          ? null
+                          : () => _runAction(
+                              'stopAudio',
+                              widget.sdk.audioHelper.stopAudio,
+                            ),
                     ),
-                    ElevatedButton(
-                      onPressed: myId == null
+                    ElevatedButton.icon(
+                      icon: const Icon(Icons.mic_off),
+                      label: const Text('Mute'),
+                      onPressed: (myId == null || !audioStarted || isMuted)
                           ? null
                           : () => _runAction(
                               'muteAudio(self)',
                               () => widget.sdk.audioHelper.muteAudio(myId),
                             ),
-                      child: const Text('Mute self'),
                     ),
-                    ElevatedButton(
-                      onPressed: myId == null
+                    ElevatedButton.icon(
+                      icon: const Icon(Icons.mic),
+                      label: const Text('Unmute'),
+                      onPressed: (myId == null || !audioStarted || !isMuted)
                           ? null
                           : () => _runAction(
                               'unmuteAudio(self)',
                               () => widget.sdk.audioHelper.unmuteAudio(myId),
                             ),
-                      child: const Text('Unmute self'),
                     ),
                   ],
                 ),
@@ -551,38 +605,81 @@ class _SessionScreenState extends State<SessionScreen> {
   // ---- Section: Video ----
 
   Widget _videoSection() {
+    final videoOn = _myself?.videoStatus?.isOn ?? false;
     return Card(
       child: ExpansionTile(
-        title: const Text('Video'),
+        title: Row(
+          children: [
+            const Text('Video'),
+            const SizedBox(width: 8),
+            Icon(
+              videoOn ? Icons.videocam : Icons.videocam_off,
+              size: 16,
+              color: videoOn ? Colors.green : null,
+            ),
+          ],
+        ),
+        initiallyExpanded: true,
         children: [
           Padding(
             padding: const EdgeInsets.all(12),
-            child: Wrap(
-              spacing: 8,
-              runSpacing: 4,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                ElevatedButton(
-                  onPressed: () => _runAction(
-                    'startVideo',
-                    widget.sdk.videoHelper.startVideo,
-                  ),
-                  child: const Text('Start video'),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 4,
+                  children: [
+                    ElevatedButton.icon(
+                      icon: const Icon(Icons.videocam),
+                      label: const Text('Start video'),
+                      onPressed: videoOn
+                          ? null
+                          : () => _runAction(
+                              'startVideo',
+                              widget.sdk.videoHelper.startVideo,
+                            ),
+                    ),
+                    ElevatedButton.icon(
+                      icon: const Icon(Icons.videocam_off),
+                      label: const Text('Stop video'),
+                      onPressed: !videoOn
+                          ? null
+                          : () => _runAction(
+                              'stopVideo',
+                              widget.sdk.videoHelper.stopVideo,
+                            ),
+                    ),
+                    OutlinedButton.icon(
+                      icon: const Icon(Icons.cameraswitch),
+                      label: const Text('Select camera'),
+                      onPressed: _onListCameras,
+                    ),
+                  ],
                 ),
-                ElevatedButton(
-                  onPressed: () =>
-                      _runAction('stopVideo', widget.sdk.videoHelper.stopVideo),
-                  child: const Text('Stop video'),
-                ),
-                ElevatedButton(
-                  onPressed: () => _runAction(
-                    'switchCamera',
-                    widget.sdk.videoHelper.switchCamera,
-                  ),
-                  child: const Text('Switch camera'),
-                ),
-                OutlinedButton(
-                  onPressed: _onListCameras,
-                  child: const Text('List cameras (desktop)'),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    const Text('Quality preference: '),
+                    DropdownButton<ZoomVideoPreferenceMode>(
+                      value: _videoPreferenceMode,
+                      items: ZoomVideoPreferenceMode.values
+                          .map(
+                            (m) =>
+                                DropdownMenuItem(value: m, child: Text(m.name)),
+                          )
+                          .toList(),
+                      onChanged: (mode) async {
+                        if (mode == null) return;
+                        setState(() => _videoPreferenceMode = mode);
+                        await _runAction(
+                          'setVideoQualityPreference',
+                          () => widget.sdk.videoHelper
+                              .setVideoQualityPreference(mode),
+                        );
+                      },
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -616,6 +713,15 @@ class _SessionScreenState extends State<SessionScreen> {
                             c.deviceId,
                             style: const TextStyle(fontSize: 11),
                           ),
+                          onTap: () async {
+                            Navigator.of(ctx).pop();
+                            await _runAction(
+                              'selectCamera',
+                              () => widget.sdk.videoHelper.selectCamera(
+                                c.deviceId,
+                              ),
+                            );
+                          },
                         ),
                       )
                       .toList(),
@@ -647,51 +753,69 @@ class _SessionScreenState extends State<SessionScreen> {
                   spacing: 8,
                   runSpacing: 4,
                   children: [
-                    ElevatedButton(
-                      onPressed: () => _runAction(
-                        'startShareScreen',
-                        widget.sdk.shareHelper.startShareScreen,
-                      ),
-                      child: const Text('Start share screen'),
+                    ElevatedButton.icon(
+                      icon: const Icon(Icons.screen_share),
+                      label: const Text('Pick source & share'),
+                      onPressed: _onPickShareSource,
                     ),
-                    ElevatedButton(
+                    ElevatedButton.icon(
+                      icon: const Icon(Icons.stop_screen_share),
+                      label: const Text('Stop share'),
                       onPressed: () => _runAction(
                         'stopShare',
                         widget.sdk.shareHelper.stopShare,
                       ),
-                      child: const Text('Stop share'),
                     ),
                   ],
                 ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _shareWindowCtrl,
-                        decoration: const InputDecoration(
-                          labelText: 'Window ID (desktop)',
-                          border: OutlineInputBorder(),
-                          isDense: true,
-                        ),
-                      ),
+                const SizedBox(height: 4),
+                CheckboxListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  title: const Text('Include device audio in share'),
+                  value: _shareWithDeviceAudio,
+                  onChanged: (v) =>
+                      setState(() => _shareWithDeviceAudio = v ?? false),
+                ),
+                CheckboxListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  title: const Text(
+                    'Optimize for video (smoother motion, lower detail)',
+                  ),
+                  subtitle: const Text(
+                    'Applies on share start. Use the button below to toggle mid-share.',
+                    style: TextStyle(fontSize: 11),
+                  ),
+                  value: _shareOptimizeForVideo,
+                  onChanged: (v) {
+                    final next = v ?? false;
+                    setState(() => _shareOptimizeForVideo = next);
+                  },
+                ),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: OutlinedButton.icon(
+                    icon: const Icon(Icons.tune),
+                    label: Text(
+                      _shareOptimizeForVideo
+                          ? 'Disable video optimization (runtime)'
+                          : 'Enable video optimization (runtime)',
                     ),
-                    const SizedBox(width: 8),
-                    ElevatedButton(
-                      onPressed: () {
-                        final id = _shareWindowCtrl.text.trim();
-                        if (id.isEmpty) {
-                          _showSnack('Enter a window ID first');
-                          return;
-                        }
-                        _runAction(
-                          'startShareView',
-                          () => widget.sdk.shareHelper.startShareView(id),
-                        );
-                      },
-                      child: const Text('Start share view'),
-                    ),
-                  ],
+                    onPressed: () async {
+                      final next = !_shareOptimizeForVideo;
+                      await _runAction(
+                        'enableOptimizeForSharedVideo($next)',
+                        () => widget.sdk.shareHelper
+                            .enableOptimizeForSharedVideo(next),
+                      );
+                      if (mounted) {
+                        setState(() => _shareOptimizeForVideo = next);
+                      }
+                    },
+                  ),
                 ),
                 SwitchListTile(
                   dense: true,
@@ -707,6 +831,105 @@ class _SessionScreenState extends State<SessionScreen> {
                 ),
               ],
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _onPickShareSource() async {
+    final sources = await _runQuery(
+      'getShareSourceList',
+      widget.sdk.shareHelper.getShareSourceList,
+    );
+    if (sources == null || !mounted) return;
+    final option = ZoomShareOption(
+      withDeviceAudio: _shareWithDeviceAudio,
+      optimizeForSharedVideo: _shareOptimizeForVideo,
+    );
+    final screens = sources
+        .where((s) => s.type == ZoomShareSourceType.screen)
+        .toList();
+    final windows = sources
+        .where((s) => s.type == ZoomShareSourceType.window)
+        .toList();
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Pick a source to share'),
+        content: SizedBox(
+          width: double.maxFinite,
+          height: 400,
+          child: ListView(
+            shrinkWrap: true,
+            children: [
+              if (screens.isNotEmpty) ...[
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  child: Text(
+                    'Monitors',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
+                ...screens.map(
+                  (s) => ListTile(
+                    dense: true,
+                    leading: const Icon(Icons.desktop_windows),
+                    title: Text(s.name),
+                    subtitle: Text(
+                      s.sourceId,
+                      style: const TextStyle(fontSize: 11),
+                    ),
+                    onTap: () {
+                      Navigator.of(ctx).pop();
+                      _runAction(
+                        'startShareScreen(${s.sourceId})',
+                        () => widget.sdk.shareHelper.startShareScreen(
+                          monitorId: s.sourceId,
+                          option: option,
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+              if (windows.isNotEmpty) ...[
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  child: Text(
+                    'Windows',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
+                ...windows.map(
+                  (s) => ListTile(
+                    dense: true,
+                    leading: const Icon(Icons.window),
+                    title: Text(s.name),
+                    subtitle: Text(
+                      s.sourceId,
+                      style: const TextStyle(fontSize: 11),
+                    ),
+                    onTap: () {
+                      Navigator.of(ctx).pop();
+                      _runAction(
+                        'startShareView(${s.sourceId})',
+                        () => widget.sdk.shareHelper.startShareView(
+                          s.sourceId,
+                          option: option,
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Close'),
           ),
         ],
       ),
@@ -785,7 +1008,7 @@ class _SessionScreenState extends State<SessionScreen> {
                           widget.sdk.chatHelper.isChatDisabled,
                         );
                         if (v != null && mounted) {
-                          _showSnack('isChatDisabled: $v');
+                          _log('isChatDisabled: $v');
                         }
                       },
                       child: const Text('Chat disabled?'),
@@ -797,7 +1020,7 @@ class _SessionScreenState extends State<SessionScreen> {
                           widget.sdk.chatHelper.isPrivateChatDisabled,
                         );
                         if (v != null && mounted) {
-                          _showSnack('isPrivateChatDisabled: $v');
+                          _log('isPrivateChatDisabled: $v');
                         }
                       },
                       child: const Text('Private chat disabled?'),
@@ -815,7 +1038,7 @@ class _SessionScreenState extends State<SessionScreen> {
   void _onSendChatToAll() {
     final msg = _chatMessageCtrl.text.trim();
     if (msg.isEmpty) {
-      _showSnack('Enter a message');
+      _log('Enter a message');
       return;
     }
     _runAction(
@@ -830,7 +1053,7 @@ class _SessionScreenState extends State<SessionScreen> {
     final msg = _chatMessageCtrl.text.trim();
     final receiver = _chatReceiverId;
     if (msg.isEmpty || receiver == null) {
-      _showSnack('Pick a recipient and enter a message');
+      _log('Pick a recipient and enter a message');
       return;
     }
     _runAction(
@@ -861,7 +1084,7 @@ class _SessionScreenState extends State<SessionScreen> {
                       widget.sdk.recordingHelper.canStartRecording,
                     );
                     if (v != null && mounted) {
-                      _showSnack('canStartRecording: $v');
+                      _log('canStartRecording: $v');
                     }
                   },
                   child: const Text('Can start? (desktop)'),
@@ -910,7 +1133,7 @@ class _SessionScreenState extends State<SessionScreen> {
                           'isSupported',
                           widget.sdk.virtualBackgroundHelper.isSupported,
                         );
-                        if (v != null && mounted) _showSnack('isSupported: $v');
+                        if (v != null && mounted) _log('isSupported: $v');
                       },
                       child: const Text('Supported?'),
                     ),
@@ -925,7 +1148,7 @@ class _SessionScreenState extends State<SessionScreen> {
                           widget.sdk.virtualBackgroundHelper.getSelectedItem,
                         );
                         if (!mounted) return;
-                        _showSnack('selected: ${item?.imageName ?? "(none)"}');
+                        _log('selected: ${item?.imageName ?? "(none)"}');
                       },
                       child: const Text('Get selected'),
                     ),
@@ -949,7 +1172,7 @@ class _SessionScreenState extends State<SessionScreen> {
                       onPressed: () {
                         final path = _vbPathCtrl.text.trim();
                         if (path.isEmpty) {
-                          _showSnack('Enter a file path');
+                          _log('Enter a file path');
                           return;
                         }
                         _runAction(
@@ -980,7 +1203,7 @@ class _SessionScreenState extends State<SessionScreen> {
                       onPressed: () {
                         final name = _vbRemoveCtrl.text.trim();
                         if (name.isEmpty) {
-                          _showSnack('Enter an image name');
+                          _log('Enter an image name');
                           return;
                         }
                         _runAction(
