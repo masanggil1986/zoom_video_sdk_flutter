@@ -31,110 +31,65 @@ public class ZoomVideoSdkFlutterPlugin: NSObject, FlutterPlugin {
 
         switch call.method {
         // SDK 라이프사이클
-        case "init":
-            handleInit(args: args, result: result)
-        case "joinSession":
-            handleJoinSession(args: args, result: result)
-        case "leaveSession":
-            handleLeaveSession(args: args, result: result)
-        case "getSessionInfo":
-            handleGetSessionInfo(result: result)
-        case "getMyself":
-            handleGetMyself(result: result)
-        case "getAllUsers":
-            handleGetAllUsers(result: result)
-        case "getRemoteUsers":
-            handleGetRemoteUsers(result: result)
+        case "init":                              handleInit(args: args, result: result)
+        case "joinSession":                       handleJoinSession(args: args, result: result)
+        case "leaveSession":                      handleLeaveSession(args: args, result: result)
+        case "getSessionInfo":                    handleGetSessionInfo(result: result)
+        case "getMyself":                         handleGetMyself(result: result)
+        case "getAllUsers":                       handleGetAllUsers(result: result)
+        case "getRemoteUsers":                    handleGetRemoteUsers(result: result)
 
         // Audio
-        case "audio.startAudio":
-            handleAudioStartAudio(result: result)
-        case "audio.stopAudio":
-            handleAudioStopAudio(result: result)
-        case "audio.muteAudio":
-            handleAudioMuteAudio(args: args, result: result)
-        case "audio.unmuteAudio":
-            handleAudioUnmuteAudio(args: args, result: result)
-        case "audio.enableMicOriginalInput":
-            handleAudioEnableMicOriginalInput(args: args, result: result)
-        case "audio.setNoiseSuppression":
-            handleAudioSetNoiseSuppression(args: args, result: result)
-        case "audio.getAudioDeviceList":
-            handleAudioGetDeviceList(result: result)
-        case "audio.selectAudioDevice":
-            handleAudioSelectDevice(args: args, result: result)
+        case "audio.startAudio":                  handleAudioStartAudio(result: result)
+        case "audio.stopAudio":                   handleAudioStopAudio(result: result)
+        case "audio.muteAudio":                   handleAudioMuteAudio(args: args, result: result)
+        case "audio.unmuteAudio":                 handleAudioUnmuteAudio(args: args, result: result)
+        case "audio.enableMicOriginalInput":      handleAudioEnableMicOriginalInput(args: args, result: result)
+        case "audio.setNoiseSuppression":         handleAudioSetNoiseSuppression(args: args, result: result)
+        case "audio.getAudioDeviceList":          handleAudioGetDeviceList(result: result)
+        case "audio.selectAudioDevice":           handleAudioSelectDevice(args: args, result: result)
 
         // Video
-        case "video.startVideo":
-            handleVideoStartVideo(result: result)
-        case "video.stopVideo":
-            handleVideoStopVideo(result: result)
-        case "video.switchCamera":
-            handleVideoSwitchCamera(result: result)
-        case "video.getCameraList":
-            handleVideoGetCameraList(result: result)
-        case "video.selectCamera":
-            handleVideoSelectCamera(args: args, result: result)
-        case "video.setVideoQualityPreference":
-            handleVideoSetQualityPreference(args: args, result: result)
+        case "video.startVideo":                  handleVideoStartVideo(result: result)
+        case "video.stopVideo":                   handleVideoStopVideo(result: result)
+        case "video.switchCamera":                handleVideoSwitchCamera(result: result)
+        case "video.getCameraList":               handleVideoGetCameraList(result: result)
+        case "video.selectCamera":                handleVideoSelectCamera(args: args, result: result)
+        case "video.setVideoQualityPreference":   handleVideoSetQualityPreference(args: args, result: result)
 
         // Share
-        case "share.startShareScreen":
-            handleShareStartScreen(args: args, result: result)
-        case "share.startShareView":
-            handleShareStartView(args: args, result: result)
-        case "share.stopShare":
-            handleShareStop(result: result)
-        case "share.enableShareDeviceAudio":
-            handleShareEnableDeviceAudio(args: args, result: result)
-        case "share.getShareSourceList":
-            handleShareGetSourceList(result: result)
-        case "share.enableOptimizeForSharedVideo":
-            handleShareEnableOptimizeForVideo(args: args, result: result)
+        case "share.startShareScreen":            handleShareStartScreen(args: args, result: result)
+        case "share.startShareView":              handleShareStartView(args: args, result: result)
+        case "share.stopShare":                   handleShareStop(result: result)
+        case "share.enableShareDeviceAudio":      handleShareEnableDeviceAudio(args: args, result: result)
+        case "share.getShareSourceList":          handleShareGetSourceList(result: result)
+        case "share.enableOptimizeForSharedVideo": handleShareEnableOptimizeForVideo(args: args, result: result)
 
         // Chat
-        case "chat.sendChatToAll":
-            handleChatSendToAll(args: args, result: result)
-        case "chat.sendChatToUser":
-            handleChatSendToUser(args: args, result: result)
-        case "chat.isChatDisabled":
-            handleChatIsDisabled(result: result)
-        case "chat.isPrivateChatDisabled":
-            handleChatIsPrivateDisabled(result: result)
+        case "chat.sendChatToAll":                handleChatSendToAll(args: args, result: result)
+        case "chat.sendChatToUser":               handleChatSendToUser(args: args, result: result)
+        case "chat.isChatDisabled":               handleChatIsDisabled(result: result)
+        case "chat.isPrivateChatDisabled":        handleChatIsPrivateDisabled(result: result)
 
         // Recording
-        case "recording.canStartRecording":
-            handleRecordingCanStart(result: result)
-        case "recording.startCloudRecording":
-            handleRecordingStart(result: result)
-        case "recording.stopCloudRecording":
-            handleRecordingStop(result: result)
+        case "recording.canStartRecording":       handleRecordingCanStart(result: result)
+        case "recording.startCloudRecording":     handleRecordingStart(result: result)
+        case "recording.stopCloudRecording":      handleRecordingStop(result: result)
 
         // Virtual Background
-        case "virtualBackground.isSupported":
-            handleVBIsSupported(result: result)
-        case "virtualBackground.addItem":
-            handleVBAddItem(args: args, result: result)
-        case "virtualBackground.getItemList":
-            handleVBGetItemList(result: result)
-        case "virtualBackground.setItem":
-            handleVBSetItem(args: args, result: result)
-        case "virtualBackground.removeItem":
-            handleVBRemoveItem(args: args, result: result)
-        case "virtualBackground.getSelectedItem":
-            handleVBGetSelectedItem(result: result)
+        case "virtualBackground.isSupported":     handleVBIsSupported(result: result)
+        case "virtualBackground.addItem":         handleVBAddItem(args: args, result: result)
+        case "virtualBackground.getItemList":     handleVBGetItemList(result: result)
+        case "virtualBackground.setItem":         handleVBSetItem(args: args, result: result)
+        case "virtualBackground.removeItem":      handleVBRemoveItem(args: args, result: result)
+        case "virtualBackground.getSelectedItem": handleVBGetSelectedItem(result: result)
 
         // User Management
-        case "user.makeHost":
-            handleUserMakeHost(args: args, result: result)
-        case "user.makeManager":
-            handleUserMakeManager(args: args, result: result)
-        case "user.revokeManager":
-            handleUserRevokeManager(args: args, result: result)
-        case "user.removeUser":
-            handleUserRemove(args: args, result: result)
-        case "user.changeName":
-            handleUserChangeName(args: args, result: result)
+        case "user.makeHost":                     handleUserMakeHost(args: args, result: result)
+        case "user.makeManager":                  handleUserMakeManager(args: args, result: result)
+        case "user.revokeManager":                handleUserRevokeManager(args: args, result: result)
+        case "user.removeUser":                   handleUserRemove(args: args, result: result)
+        case "user.changeName":                   handleUserChangeName(args: args, result: result)
 
         default:
             result(FlutterMethodNotImplemented)
@@ -143,21 +98,46 @@ public class ZoomVideoSdkFlutterPlugin: NSObject, FlutterPlugin {
 
     // MARK: - Helpers
 
-    private var sdk: ZMVideoSDK? { ZMVideoSDK.shared() }
+    fileprivate var sdk: ZMVideoSDK? { ZMVideoSDK.shared() }
 
-    private func findUser(byId userId: String) -> ZMVideoSDKUser? {
+    fileprivate func findUser(byId userId: String) -> ZMVideoSDKUser? {
         guard let session = sdk?.getSessionInfo() else { return nil }
         if let myself = session.getMySelf(), (myself.getID() ?? "") == userId {
             return myself
         }
-        if let remoteUsers = session.getRemoteUsers() {
-            return remoteUsers.first { ($0.getID() ?? "") == userId }
-        }
-        return nil
+        return session.getRemoteUsers()?.first { ($0.getID() ?? "") == userId }
     }
 
-    private func flutterError(_ code: String, _ message: String) -> FlutterError {
+    fileprivate func flutterError(_ code: String, _ message: String) -> FlutterError {
         FlutterError(code: code, message: message, details: nil)
+    }
+
+    /// SDK err 반환을 FlutterResult로 전달. Success면 nil, 아니면 FlutterError.
+    fileprivate func reply(_ err: ZMVideoSDKErrors?, _ result: FlutterResult, _ code: String, _ op: String) {
+        if err == ZMVideoSDKErrors_Success {
+            result(nil)
+        } else {
+            result(flutterError(code, "\(op) failed: \(String(describing: err))"))
+        }
+    }
+
+    /// Bool 반환(true=성공)을 FlutterResult로 전달.
+    fileprivate func reply(_ success: Bool, _ result: FlutterResult, _ code: String, _ op: String) {
+        if success {
+            result(nil)
+        } else {
+            result(flutterError(code, "\(op) failed"))
+        }
+    }
+
+    /// args["userId"]로 사용자 조회. 실패 시 FlutterError 응답하고 nil 반환.
+    fileprivate func requireUser(_ args: [String: Any]?, _ result: FlutterResult) -> ZMVideoSDKUser? {
+        guard let userId = args?["userId"] as? String,
+              let user = findUser(byId: userId) else {
+            result(flutterError("INVALID_ARGS", "User not found"))
+            return nil
+        }
+        return user
     }
 }
 
@@ -176,15 +156,14 @@ private extension ZoomVideoSdkFlutterPlugin {
         initParams.enableLog = args["enableLog"] as? Bool ?? true
 
         let sdkResult = sdk?.initialize(initParams)
-
-        if sdkResult == ZMVideoSDKErrors_Success {
-            if let handler = eventStreamHandler {
-                sdk?.addListener(handler)
-            }
-            result(nil)
-        } else {
+        guard sdkResult == ZMVideoSDKErrors_Success else {
             result(flutterError("INIT_FAILED", "SDK init failed: \(String(describing: sdkResult))"))
+            return
         }
+        if let handler = eventStreamHandler {
+            sdk?.addListener(handler)
+        }
+        result(nil)
     }
 
     func handleJoinSession(args: [String: Any]?, result: @escaping FlutterResult) {
@@ -203,8 +182,7 @@ private extension ZoomVideoSdkFlutterPlugin {
             let audio = ZMVideoSDKAudioOption()
             audio.connect = audioOpts["connect"] as? Bool ?? true
             audio.mute = audioOpts["mute"] as? Bool ?? false
-            audio.autoAdjustSpeakerVolume =
-                audioOpts["autoAdjustSpeakerVolume"] as? Bool ?? true
+            audio.autoAdjustSpeakerVolume = audioOpts["autoAdjustSpeakerVolume"] as? Bool ?? true
             ctx.audioOption = audio
         }
 
@@ -218,8 +196,7 @@ private extension ZoomVideoSdkFlutterPlugin {
             ctx.sessionIdleTimeoutMins = UInt32(timeout)
         }
 
-        let session = sdk?.joinSession(ctx)
-        if session != nil {
+        if sdk?.joinSession(ctx) != nil {
             result(nil)
         } else {
             result(flutterError("JOIN_FAILED", "Failed to join session"))
@@ -257,9 +234,7 @@ private extension ZoomVideoSdkFlutterPlugin {
         if let myself = session.getMySelf() {
             users.append(ZoomSerializer.serializeUser(myself))
         }
-        if let remoteUsers = session.getRemoteUsers() {
-            users.append(contentsOf: remoteUsers.map { ZoomSerializer.serializeUser($0) })
-        }
+        users.append(contentsOf: (session.getRemoteUsers() ?? []).map { ZoomSerializer.serializeUser($0) })
         result(users)
     }
 
@@ -268,8 +243,7 @@ private extension ZoomVideoSdkFlutterPlugin {
             result(flutterError("NO_SESSION", "No active session"))
             return
         }
-        let remoteUsers = session.getRemoteUsers() ?? []
-        result(remoteUsers.map { ZoomSerializer.serializeUser($0) })
+        result((session.getRemoteUsers() ?? []).map { ZoomSerializer.serializeUser($0) })
     }
 }
 
@@ -278,76 +252,39 @@ private extension ZoomVideoSdkFlutterPlugin {
 private extension ZoomVideoSdkFlutterPlugin {
 
     func handleAudioStartAudio(result: @escaping FlutterResult) {
-        let err = sdk?.getAudioHelper().startAudio()
-        if err == ZMVideoSDKErrors_Success {
-            result(nil)
-        } else {
-            result(flutterError("AUDIO_ERROR", "startAudio failed: \(String(describing: err))"))
-        }
+        reply(sdk?.getAudioHelper().startAudio(), result, "AUDIO_ERROR", "startAudio")
     }
 
     func handleAudioStopAudio(result: @escaping FlutterResult) {
-        let err = sdk?.getAudioHelper().stopAudio()
-        if err == ZMVideoSDKErrors_Success {
-            result(nil)
-        } else {
-            result(flutterError("AUDIO_ERROR", "stopAudio failed: \(String(describing: err))"))
-        }
+        reply(sdk?.getAudioHelper().stopAudio(), result, "AUDIO_ERROR", "stopAudio")
     }
 
     func handleAudioMuteAudio(args: [String: Any]?, result: @escaping FlutterResult) {
-        guard let userId = args?["userId"] as? String,
-              let user = findUser(byId: userId) else {
-            result(flutterError("INVALID_ARGS", "User not found"))
-            return
-        }
-        let err = sdk?.getAudioHelper().muteAudio(user)
-        if err == ZMVideoSDKErrors_Success {
-            result(nil)
-        } else {
-            result(flutterError("AUDIO_ERROR", "muteAudio failed: \(String(describing: err))"))
-        }
+        guard let user = requireUser(args, result) else { return }
+        reply(sdk?.getAudioHelper().muteAudio(user), result, "AUDIO_ERROR", "muteAudio")
     }
 
     func handleAudioUnmuteAudio(args: [String: Any]?, result: @escaping FlutterResult) {
-        guard let userId = args?["userId"] as? String,
-              let user = findUser(byId: userId) else {
-            result(flutterError("INVALID_ARGS", "User not found"))
-            return
-        }
-        let err = sdk?.getAudioHelper().unMuteAudio(user)
-        if err == ZMVideoSDKErrors_Success {
-            result(nil)
-        } else {
-            result(flutterError("AUDIO_ERROR", "unmuteAudio failed: \(String(describing: err))"))
-        }
+        guard let user = requireUser(args, result) else { return }
+        reply(sdk?.getAudioHelper().unMuteAudio(user), result, "AUDIO_ERROR", "unmuteAudio")
     }
 
     func handleAudioEnableMicOriginalInput(args: [String: Any]?, result: @escaping FlutterResult) {
         let enable = args?["enable"] as? Bool ?? false
-        let err = sdk?.getAudioSettingHelper().enableMicOriginalInput(enable)
-        if err == ZMVideoSDKErrors_Success {
-            result(nil)
-        } else {
-            result(flutterError("AUDIO_ERROR", "enableMicOriginalInput failed: \(String(describing: err))"))
-        }
+        reply(sdk?.getAudioSettingHelper().enableMicOriginalInput(enable),
+              result, "AUDIO_ERROR", "enableMicOriginalInput")
     }
 
     func handleAudioSetNoiseSuppression(args: [String: Any]?, result: @escaping FlutterResult) {
-        let levelStr = args?["level"] as? String ?? "auto_"
         let level: ZMVideoSDKSuppressBackgroundNoiseLevel
-        switch levelStr {
-        case "low": level = ZMVideoSDKSuppressBackgroundNoiseLevel_Low
+        switch args?["level"] as? String {
+        case "low":    level = ZMVideoSDKSuppressBackgroundNoiseLevel_Low
         case "medium": level = ZMVideoSDKSuppressBackgroundNoiseLevel_Medium
-        case "high": level = ZMVideoSDKSuppressBackgroundNoiseLevel_High
-        default: level = ZMVideoSDKSuppressBackgroundNoiseLevel_Auto
+        case "high":   level = ZMVideoSDKSuppressBackgroundNoiseLevel_High
+        default:       level = ZMVideoSDKSuppressBackgroundNoiseLevel_Auto
         }
-        let err = sdk?.getAudioSettingHelper().setSuppressBackgroundNoiseLevel(level)
-        if err == ZMVideoSDKErrors_Success {
-            result(nil)
-        } else {
-            result(flutterError("AUDIO_ERROR", "setNoiseSuppression failed: \(String(describing: err))"))
-        }
+        reply(sdk?.getAudioSettingHelper().setSuppressBackgroundNoiseLevel(level),
+              result, "AUDIO_ERROR", "setNoiseSuppression")
     }
 
     func handleAudioGetDeviceList(result: @escaping FlutterResult) {
@@ -355,12 +292,9 @@ private extension ZoomVideoSdkFlutterPlugin {
             result([])
             return
         }
-        let micList = helper.getMicList() ?? []
-        let speakerList = helper.getSpeakerList() ?? []
-        var all: [[String: Any]] = []
-        all.append(contentsOf: micList.map { ZoomSerializer.serializeMicDevice($0) })
-        all.append(contentsOf: speakerList.map { ZoomSerializer.serializeSpeakerDevice($0) })
-        result(all)
+        let mics = (helper.getMicList() ?? []).map { ZoomSerializer.serializeMicDevice($0) }
+        let speakers = (helper.getSpeakerList() ?? []).map { ZoomSerializer.serializeSpeakerDevice($0) }
+        result(mics + speakers)
     }
 
     func handleAudioSelectDevice(args: [String: Any]?, result: @escaping FlutterResult) {
@@ -372,23 +306,15 @@ private extension ZoomVideoSdkFlutterPlugin {
             result(flutterError("AUDIO_ERROR", "Audio helper not available"))
             return
         }
-        // mic 목록에서 찾기
-        if let micList = helper.getMicList(),
-           let device = micList.first(where: { $0.deviceId == deviceId }) {
-            let err = helper.selectMic(device.deviceId, deviceName: device.deviceName)
-            if err == ZMVideoSDKErrors_Success {
-                result(nil)
-                return
-            }
+        if let mic = helper.getMicList()?.first(where: { $0.deviceId == deviceId }),
+           helper.selectMic(mic.deviceId, deviceName: mic.deviceName) == ZMVideoSDKErrors_Success {
+            result(nil)
+            return
         }
-        // speaker 목록에서 찾기
-        if let speakerList = helper.getSpeakerList(),
-           let device = speakerList.first(where: { $0.deviceId == deviceId }) {
-            let err = helper.selectSpeaker(device.deviceId, deviceName: device.deviceName)
-            if err == ZMVideoSDKErrors_Success {
-                result(nil)
-                return
-            }
+        if let speaker = helper.getSpeakerList()?.first(where: { $0.deviceId == deviceId }),
+           helper.selectSpeaker(speaker.deviceId, deviceName: speaker.deviceName) == ZMVideoSDKErrors_Success {
+            result(nil)
+            return
         }
         result(flutterError("AUDIO_ERROR", "Device not found: \(deviceId)"))
     }
@@ -399,30 +325,15 @@ private extension ZoomVideoSdkFlutterPlugin {
 private extension ZoomVideoSdkFlutterPlugin {
 
     func handleVideoStartVideo(result: @escaping FlutterResult) {
-        let err = sdk?.getVideoHelper().startVideo()
-        if err == ZMVideoSDKErrors_Success {
-            result(nil)
-        } else {
-            result(flutterError("VIDEO_ERROR", "startVideo failed: \(String(describing: err))"))
-        }
+        reply(sdk?.getVideoHelper().startVideo(), result, "VIDEO_ERROR", "startVideo")
     }
 
     func handleVideoStopVideo(result: @escaping FlutterResult) {
-        let err = sdk?.getVideoHelper().stopVideo()
-        if err == ZMVideoSDKErrors_Success {
-            result(nil)
-        } else {
-            result(flutterError("VIDEO_ERROR", "stopVideo failed: \(String(describing: err))"))
-        }
+        reply(sdk?.getVideoHelper().stopVideo(), result, "VIDEO_ERROR", "stopVideo")
     }
 
     func handleVideoSwitchCamera(result: @escaping FlutterResult) {
-        let success = sdk?.getVideoHelper().switchCamera() ?? false
-        if success {
-            result(nil)
-        } else {
-            result(flutterError("VIDEO_ERROR", "switchCamera failed"))
-        }
+        reply(sdk?.getVideoHelper().switchCamera() ?? false, result, "VIDEO_ERROR", "switchCamera")
     }
 
     func handleVideoGetCameraList(result: @escaping FlutterResult) {
@@ -435,37 +346,24 @@ private extension ZoomVideoSdkFlutterPlugin {
             result(flutterError("INVALID_ARGS", "deviceId required"))
             return
         }
-        let success = sdk?.getVideoHelper().selectCamera(deviceId) ?? false
-        if success {
-            result(nil)
-        } else {
-            result(flutterError("VIDEO_ERROR", "selectCamera failed"))
-        }
+        reply(sdk?.getVideoHelper().selectCamera(deviceId) ?? false,
+              result, "VIDEO_ERROR", "selectCamera")
     }
 
     func handleVideoSetQualityPreference(args: [String: Any]?, result: @escaping FlutterResult) {
-        let modeStr = args?["mode"] as? String ?? "balance"
         let mode: ZMVideoSDKVideoPreferenceMode
-        switch modeStr {
-        case "sharpness": mode = ZMVideoSDKVideoPreferenceMode_Sharpness
+        switch args?["mode"] as? String {
+        case "sharpness":  mode = ZMVideoSDKVideoPreferenceMode_Sharpness
         case "smoothness": mode = ZMVideoSDKVideoPreferenceMode_Smoothness
-        case "custom": mode = ZMVideoSDKVideoPreferenceMode_Custom
-        default: mode = ZMVideoSDKVideoPreferenceMode_Balance
+        case "custom":     mode = ZMVideoSDKVideoPreferenceMode_Custom
+        default:           mode = ZMVideoSDKVideoPreferenceMode_Balance
         }
-        let minFps = UInt32(max(0, args?["minimumFrameRate"] as? Int ?? 0))
-        let maxFps = UInt32(max(0, args?["maximumFrameRate"] as? Int ?? 0))
-
         let pref = ZMVideoSDKPreferenceSetting()
         pref.mode = mode
-        pref.minimumFrameRate = minFps
-        pref.maximumFrameRate = maxFps
-
-        let err = sdk?.getVideoHelper().setVideoQualityPreference(pref)
-        if err == ZMVideoSDKErrors_Success {
-            result(nil)
-        } else {
-            result(flutterError("VIDEO_ERROR", "setVideoQualityPreference failed: \(String(describing: err))"))
-        }
+        pref.minimumFrameRate = UInt32(max(0, args?["minimumFrameRate"] as? Int ?? 0))
+        pref.maximumFrameRate = UInt32(max(0, args?["maximumFrameRate"] as? Int ?? 0))
+        reply(sdk?.getVideoHelper().setVideoQualityPreference(pref),
+              result, "VIDEO_ERROR", "setVideoQualityPreference")
     }
 }
 
@@ -474,20 +372,13 @@ private extension ZoomVideoSdkFlutterPlugin {
 private extension ZoomVideoSdkFlutterPlugin {
 
     func handleShareStartScreen(args: [String: Any]?, result: @escaping FlutterResult) {
-        let displayId: CGDirectDisplayID
-        if let monitorIdStr = args?["monitorId"] as? String,
-           let parsed = UInt32(monitorIdStr) {
-            displayId = parsed
-        } else {
-            displayId = CGMainDisplayID()
-        }
+        let displayId: CGDirectDisplayID = {
+            if let s = args?["monitorId"] as? String, let parsed = UInt32(s) { return parsed }
+            return CGMainDisplayID()
+        }()
         let option = buildShareOption(args?["option"] as? [String: Any])
-        let err = sdk?.getShareHelper().startShareScreen(displayId, shareOption: option)
-        if err == ZMVideoSDKErrors_Success {
-            result(nil)
-        } else {
-            result(flutterError("SHARE_ERROR", "startShareScreen failed: \(String(describing: err))"))
-        }
+        reply(sdk?.getShareHelper().startShareScreen(displayId, shareOption: option),
+              result, "SHARE_ERROR", "startShareScreen")
     }
 
     func buildShareOption(_ map: [String: Any]?) -> ZMVideoSDKShareOption {
@@ -501,15 +392,12 @@ private extension ZoomVideoSdkFlutterPlugin {
         var sources: [[String: Any]] = []
 
         // Monitors (NSScreen → CGDirectDisplayID)
+        let screenKey = NSDeviceDescriptionKey("NSScreenNumber")
         for (idx, screen) in NSScreen.screens.enumerated() {
-            let key = NSDeviceDescriptionKey("NSScreenNumber")
-            guard let number = screen.deviceDescription[key] as? NSNumber else { continue }
-            let displayId = number.uint32Value
-            let name = screen.localizedName.isEmpty
-                ? "Display \(idx + 1)"
-                : screen.localizedName
+            guard let number = screen.deviceDescription[screenKey] as? NSNumber else { continue }
+            let name = screen.localizedName.isEmpty ? "Display \(idx + 1)" : screen.localizedName
             sources.append([
-                "sourceId": String(displayId),
+                "sourceId": String(number.uint32Value),
                 "name": name,
                 "type": "screen",
             ])
@@ -517,34 +405,32 @@ private extension ZoomVideoSdkFlutterPlugin {
 
         // Windows (CGWindowListCopyWindowInfo, on-screen, excluding desktop)
         let options: CGWindowListOption = [.optionOnScreenOnly, .excludeDesktopElements]
-        if let windowList = CGWindowListCopyWindowInfo(options, kCGNullWindowID) as? [[String: Any]] {
-            for info in windowList {
-                guard
-                    let windowNumber = info[kCGWindowNumber as String] as? NSNumber,
-                    let layer = info[kCGWindowLayer as String] as? NSNumber,
-                    layer.intValue == 0
-                else { continue }
-                let owner = info[kCGWindowOwnerName as String] as? String ?? ""
-                let title = info[kCGWindowName as String] as? String ?? ""
-                let label: String
-                if !title.isEmpty && !owner.isEmpty {
-                    label = "\(owner) — \(title)"
-                } else if !title.isEmpty {
-                    label = title
-                } else if !owner.isEmpty {
-                    label = owner
-                } else {
-                    continue
-                }
-                sources.append([
-                    "sourceId": String(windowNumber.uint32Value),
-                    "name": label,
-                    "type": "window",
-                ])
-            }
+        let windowList = CGWindowListCopyWindowInfo(options, kCGNullWindowID) as? [[String: Any]] ?? []
+        for info in windowList {
+            guard
+                let windowNumber = info[kCGWindowNumber as String] as? NSNumber,
+                (info[kCGWindowLayer as String] as? NSNumber)?.intValue == 0
+            else { continue }
+            let owner = info[kCGWindowOwnerName as String] as? String ?? ""
+            let title = info[kCGWindowName as String] as? String ?? ""
+            guard let label = windowLabel(owner: owner, title: title) else { continue }
+            sources.append([
+                "sourceId": String(windowNumber.uint32Value),
+                "name": label,
+                "type": "window",
+            ])
         }
 
         result(sources)
+    }
+
+    private func windowLabel(owner: String, title: String) -> String? {
+        switch (owner.isEmpty, title.isEmpty) {
+        case (false, false): return "\(owner) — \(title)"
+        case (false, true):  return owner
+        case (true, false):  return title
+        case (true, true):   return nil
+        }
     }
 
     func handleShareStartView(args: [String: Any]?, result: @escaping FlutterResult) {
@@ -554,41 +440,24 @@ private extension ZoomVideoSdkFlutterPlugin {
             return
         }
         let option = buildShareOption(args?["option"] as? [String: Any])
-        let err = sdk?.getShareHelper().startShareView(CGWindowID(windowId), shareOption: option)
-        if err == ZMVideoSDKErrors_Success {
-            result(nil)
-        } else {
-            result(flutterError("SHARE_ERROR", "startShareView failed: \(String(describing: err))"))
-        }
+        reply(sdk?.getShareHelper().startShareView(CGWindowID(windowId), shareOption: option),
+              result, "SHARE_ERROR", "startShareView")
     }
 
     func handleShareStop(result: @escaping FlutterResult) {
-        let err = sdk?.getShareHelper().stopShare()
-        if err == ZMVideoSDKErrors_Success {
-            result(nil)
-        } else {
-            result(flutterError("SHARE_ERROR", "stopShare failed: \(String(describing: err))"))
-        }
+        reply(sdk?.getShareHelper().stopShare(), result, "SHARE_ERROR", "stopShare")
     }
 
     func handleShareEnableOptimizeForVideo(args: [String: Any]?, result: @escaping FlutterResult) {
         let enable = args?["enable"] as? Bool ?? false
-        let err = sdk?.getShareHelper().enableOptimize(forSharedVideo: enable)
-        if err == ZMVideoSDKErrors_Success {
-            result(nil)
-        } else {
-            result(flutterError("SHARE_ERROR", "enableOptimizeForSharedVideo failed: \(String(describing: err))"))
-        }
+        reply(sdk?.getShareHelper().enableOptimize(forSharedVideo: enable),
+              result, "SHARE_ERROR", "enableOptimizeForSharedVideo")
     }
 
     func handleShareEnableDeviceAudio(args: [String: Any]?, result: @escaping FlutterResult) {
         let enable = args?["enable"] as? Bool ?? false
-        let err = sdk?.getShareHelper().enableShareDeviceAudio(enable)
-        if err == ZMVideoSDKErrors_Success {
-            result(nil)
-        } else {
-            result(flutterError("SHARE_ERROR", "enableShareDeviceAudio failed: \(String(describing: err))"))
-        }
+        reply(sdk?.getShareHelper().enableShareDeviceAudio(enable),
+              result, "SHARE_ERROR", "enableShareDeviceAudio")
     }
 }
 
@@ -601,37 +470,26 @@ private extension ZoomVideoSdkFlutterPlugin {
             result(flutterError("INVALID_ARGS", "message required"))
             return
         }
-        let err = sdk?.getChatHelper().sendChat(toAll: message)
-        if err == ZMVideoSDKErrors_Success {
-            result(nil)
-        } else {
-            result(flutterError("CHAT_ERROR", "sendChatToAll failed: \(String(describing: err))"))
-        }
+        reply(sdk?.getChatHelper().sendChat(toAll: message),
+              result, "CHAT_ERROR", "sendChatToAll")
     }
 
     func handleChatSendToUser(args: [String: Any]?, result: @escaping FlutterResult) {
-        guard let userId = args?["userId"] as? String,
-              let message = args?["message"] as? String,
-              let user = findUser(byId: userId) else {
-            result(flutterError("INVALID_ARGS", "userId and message required"))
+        guard let message = args?["message"] as? String else {
+            result(flutterError("INVALID_ARGS", "message required"))
             return
         }
-        let err = sdk?.getChatHelper().sendChat(to: user, content: message)
-        if err == ZMVideoSDKErrors_Success {
-            result(nil)
-        } else {
-            result(flutterError("CHAT_ERROR", "sendChatToUser failed: \(String(describing: err))"))
-        }
+        guard let user = requireUser(args, result) else { return }
+        reply(sdk?.getChatHelper().sendChat(to: user, content: message),
+              result, "CHAT_ERROR", "sendChatToUser")
     }
 
     func handleChatIsDisabled(result: @escaping FlutterResult) {
-        let disabled = sdk?.getChatHelper().isChatDisabled() ?? false
-        result(disabled)
+        result(sdk?.getChatHelper().isChatDisabled() ?? false)
     }
 
     func handleChatIsPrivateDisabled(result: @escaping FlutterResult) {
-        let disabled = sdk?.getChatHelper().isPrivateChatDisabled() ?? false
-        result(disabled)
+        result(sdk?.getChatHelper().isPrivateChatDisabled() ?? false)
     }
 }
 
@@ -640,38 +498,36 @@ private extension ZoomVideoSdkFlutterPlugin {
 private extension ZoomVideoSdkFlutterPlugin {
 
     func handleRecordingCanStart(result: @escaping FlutterResult) {
-        let canStart = sdk?.getRecordingHelper().canStartRecording() == ZMVideoSDKErrors_Success
-        result(canStart)
+        result(sdk?.getRecordingHelper().canStartRecording() == ZMVideoSDKErrors_Success)
     }
 
     func handleRecordingStart(result: @escaping FlutterResult) {
-        let err = sdk?.getRecordingHelper().startCloudRecording()
-        if err == ZMVideoSDKErrors_Success {
-            result(nil)
-        } else {
-            result(flutterError("RECORDING_ERROR", "startCloudRecording failed: \(String(describing: err))"))
-        }
+        reply(sdk?.getRecordingHelper().startCloudRecording(),
+              result, "RECORDING_ERROR", "startCloudRecording")
     }
 
     func handleRecordingStop(result: @escaping FlutterResult) {
-        let err = sdk?.getRecordingHelper().stopCloudRecording()
-        if err == ZMVideoSDKErrors_Success {
-            result(nil)
-        } else {
-            result(flutterError("RECORDING_ERROR", "stopCloudRecording failed: \(String(describing: err))"))
-        }
+        reply(sdk?.getRecordingHelper().stopCloudRecording(),
+              result, "RECORDING_ERROR", "stopCloudRecording")
     }
 }
 
 // MARK: - Virtual Background Handlers
 // ZMVideoSDKVirtualBackgroundItem 심볼이 SDK 바이너리에 export되지 않아
-// 직접 타입 참조 시 링커 에러 발생. performSelector로 우회하여 구현.
+// 직접 타입 참조 시 링커 에러 발생. performSelector + KVC로 우회.
 
 private extension ZoomVideoSdkFlutterPlugin {
 
+    enum VBSelector {
+        static let addItem     = NSSelectorFromString("addVirtualBackgroundItem:imageItem:")
+        static let getList     = NSSelectorFromString("getVirtualBackgroundItemList")
+        static let setItem     = NSSelectorFromString("setVirtualBackgroundItem:")
+        static let removeItem  = NSSelectorFromString("removeVirtualBackgroundItem:")
+        static let getSelected = NSSelectorFromString("getSelectedVirtualBackgroundItem")
+    }
+
     func handleVBIsSupported(result: @escaping FlutterResult) {
-        let hasHelper = sdk?.getVideoHelper() != nil
-        result(hasHelper)
+        result(sdk?.getVideoHelper() != nil)
     }
 
     func handleVBAddItem(args: [String: Any]?, result: @escaping FlutterResult) {
@@ -679,74 +535,46 @@ private extension ZoomVideoSdkFlutterPlugin {
             result(flutterError("INVALID_ARGS", "filePath required"))
             return
         }
-        guard let helper = sdk?.getVideoHelper() else {
-            result(flutterError("VB_ERROR", "Video helper not available"))
+        guard let helper = sdk?.getVideoHelper(), helper.responds(to: VBSelector.addItem) else {
+            result(flutterError("VB_ERROR", "addItem not supported"))
             return
         }
-        let sel = NSSelectorFromString("addVirtualBackgroundItem:imageItem:")
-        if helper.responds(to: sel) {
-            helper.perform(sel, with: filePath, with: nil)
-            result(nil)
-        } else {
-            result(flutterError("VB_ERROR", "addItem not supported"))
-        }
+        helper.perform(VBSelector.addItem, with: filePath, with: nil)
+        result(nil)
     }
 
     func handleVBGetItemList(result: @escaping FlutterResult) {
-        guard let helper = sdk?.getVideoHelper() else { result([]); return }
-        let sel = NSSelectorFromString("getVirtualBackgroundItemList")
-        guard helper.responds(to: sel),
-              let items = helper.perform(sel)?.takeUnretainedValue() as? NSArray else {
-            result([])
-            return
-        }
-        var list: [[String: Any]] = []
-        for item in items {
-            if let obj = item as? NSObject {
-                let name = obj.value(forKey: "imageName") as? String ?? ""
-                let path = obj.value(forKey: "imageFilePath") as? String ?? ""
-                list.append(["imageName": name, "imagePath": path])
-            }
-        }
-        result(list)
+        result(vbItems().map(serializeVBItem))
     }
 
     func handleVBSetItem(args: [String: Any]?, result: @escaping FlutterResult) {
-        guard let imageName = args?["imageName"] as? String else {
-            result(flutterError("INVALID_ARGS", "imageName required"))
-            return
-        }
-        guard let helper = sdk?.getVideoHelper() else {
-            result(flutterError("VB_ERROR", "Video helper not available"))
-            return
-        }
-        let listSel = NSSelectorFromString("getVirtualBackgroundItemList")
-        guard helper.responds(to: listSel),
-              let items = helper.perform(listSel)?.takeUnretainedValue() as? NSArray else {
-            result(flutterError("VB_ERROR", "Item not found"))
-            return
-        }
-        var targetItem: NSObject?
-        for item in items {
-            if let obj = item as? NSObject, (obj.value(forKey: "imageName") as? String) == imageName {
-                targetItem = obj
-                break
-            }
-        }
-        guard let item = targetItem else {
-            result(flutterError("VB_ERROR", "Item not found: \(imageName)"))
-            return
-        }
-        let setSel = NSSelectorFromString("setVirtualBackgroundItem:")
-        if helper.responds(to: setSel) {
-            helper.perform(setSel, with: item)
-            result(nil)
-        } else {
-            result(flutterError("VB_ERROR", "setItem not supported"))
-        }
+        performVBItemAction(args: args, selector: VBSelector.setItem,
+                            opName: "setItem", result: result)
     }
 
     func handleVBRemoveItem(args: [String: Any]?, result: @escaping FlutterResult) {
+        performVBItemAction(args: args, selector: VBSelector.removeItem,
+                            opName: "removeItem", result: result)
+    }
+
+    func handleVBGetSelectedItem(result: @escaping FlutterResult) {
+        guard let helper = sdk?.getVideoHelper(),
+              helper.responds(to: VBSelector.getSelected),
+              let obj = helper.perform(VBSelector.getSelected)?.takeUnretainedValue() as? NSObject else {
+            result(nil)
+            return
+        }
+        result(serializeVBItem(obj))
+    }
+
+    // MARK: VB helpers
+
+    private func performVBItemAction(
+        args: [String: Any]?,
+        selector: Selector,
+        opName: String,
+        result: @escaping FlutterResult
+    ) {
         guard let imageName = args?["imageName"] as? String else {
             result(flutterError("INVALID_ARGS", "imageName required"))
             return
@@ -755,43 +583,36 @@ private extension ZoomVideoSdkFlutterPlugin {
             result(flutterError("VB_ERROR", "Video helper not available"))
             return
         }
-        let listSel = NSSelectorFromString("getVirtualBackgroundItemList")
-        guard helper.responds(to: listSel),
-              let items = helper.perform(listSel)?.takeUnretainedValue() as? NSArray else {
-            result(flutterError("VB_ERROR", "Item not found"))
-            return
-        }
-        var targetItem: NSObject?
-        for item in items {
-            if let obj = item as? NSObject, (obj.value(forKey: "imageName") as? String) == imageName {
-                targetItem = obj
-                break
-            }
-        }
-        guard let item = targetItem else {
+        guard let item = findVBItem(named: imageName) else {
             result(flutterError("VB_ERROR", "Item not found: \(imageName)"))
             return
         }
-        let removeSel = NSSelectorFromString("removeVirtualBackgroundItem:")
-        if helper.responds(to: removeSel) {
-            helper.perform(removeSel, with: item)
-            result(nil)
-        } else {
-            result(flutterError("VB_ERROR", "removeItem not supported"))
-        }
-    }
-
-    func handleVBGetSelectedItem(result: @escaping FlutterResult) {
-        guard let helper = sdk?.getVideoHelper() else { result(nil); return }
-        let sel = NSSelectorFromString("getSelectedVirtualBackgroundItem")
-        guard helper.responds(to: sel),
-              let obj = helper.perform(sel)?.takeUnretainedValue() as? NSObject else {
-            result(nil)
+        guard helper.responds(to: selector) else {
+            result(flutterError("VB_ERROR", "\(opName) not supported"))
             return
         }
-        let name = obj.value(forKey: "imageName") as? String ?? ""
-        let path = obj.value(forKey: "imageFilePath") as? String ?? ""
-        result(["imageName": name, "imagePath": path])
+        helper.perform(selector, with: item)
+        result(nil)
+    }
+
+    private func vbItems() -> [NSObject] {
+        guard let helper = sdk?.getVideoHelper(),
+              helper.responds(to: VBSelector.getList),
+              let raw = helper.perform(VBSelector.getList)?.takeUnretainedValue() as? NSArray else {
+            return []
+        }
+        return raw.compactMap { $0 as? NSObject }
+    }
+
+    private func findVBItem(named name: String) -> NSObject? {
+        vbItems().first { ($0.value(forKey: "imageName") as? String) == name }
+    }
+
+    private func serializeVBItem(_ obj: NSObject) -> [String: Any] {
+        [
+            "imageName": obj.value(forKey: "imageName") as? String ?? "",
+            "imagePath": obj.value(forKey: "imageFilePath") as? String ?? "",
+        ]
     }
 }
 
@@ -800,73 +621,32 @@ private extension ZoomVideoSdkFlutterPlugin {
 private extension ZoomVideoSdkFlutterPlugin {
 
     func handleUserMakeHost(args: [String: Any]?, result: @escaping FlutterResult) {
-        guard let userId = args?["userId"] as? String,
-              let user = findUser(byId: userId) else {
-            result(flutterError("INVALID_ARGS", "User not found"))
-            return
-        }
-        let success = sdk?.getUserHelper().makeHost(user) ?? false
-        if success {
-            result(nil)
-        } else {
-            result(flutterError("USER_ERROR", "makeHost failed"))
-        }
+        guard let user = requireUser(args, result) else { return }
+        reply(sdk?.getUserHelper().makeHost(user) ?? false, result, "USER_ERROR", "makeHost")
     }
 
     func handleUserMakeManager(args: [String: Any]?, result: @escaping FlutterResult) {
-        guard let userId = args?["userId"] as? String,
-              let user = findUser(byId: userId) else {
-            result(flutterError("INVALID_ARGS", "User not found"))
-            return
-        }
-        let success = sdk?.getUserHelper().makeManager(user) ?? false
-        if success {
-            result(nil)
-        } else {
-            result(flutterError("USER_ERROR", "makeManager failed"))
-        }
+        guard let user = requireUser(args, result) else { return }
+        reply(sdk?.getUserHelper().makeManager(user) ?? false, result, "USER_ERROR", "makeManager")
     }
 
     func handleUserRevokeManager(args: [String: Any]?, result: @escaping FlutterResult) {
-        guard let userId = args?["userId"] as? String,
-              let user = findUser(byId: userId) else {
-            result(flutterError("INVALID_ARGS", "User not found"))
-            return
-        }
-        let err = sdk?.getUserHelper().revokeManager(user)
-        if err == ZMVideoSDKErrors_Success {
-            result(nil)
-        } else {
-            result(flutterError("USER_ERROR", "revokeManager failed: \(String(describing: err))"))
-        }
+        guard let user = requireUser(args, result) else { return }
+        reply(sdk?.getUserHelper().revokeManager(user), result, "USER_ERROR", "revokeManager")
     }
 
     func handleUserRemove(args: [String: Any]?, result: @escaping FlutterResult) {
-        guard let userId = args?["userId"] as? String,
-              let user = findUser(byId: userId) else {
-            result(flutterError("INVALID_ARGS", "User not found"))
-            return
-        }
-        let success = sdk?.getUserHelper().remove(user) ?? false
-        if success {
-            result(nil)
-        } else {
-            result(flutterError("USER_ERROR", "removeUser failed"))
-        }
+        guard let user = requireUser(args, result) else { return }
+        reply(sdk?.getUserHelper().remove(user) ?? false, result, "USER_ERROR", "removeUser")
     }
 
     func handleUserChangeName(args: [String: Any]?, result: @escaping FlutterResult) {
-        guard let name = args?["name"] as? String,
-              let userId = args?["userId"] as? String,
-              let user = findUser(byId: userId) else {
-            result(flutterError("INVALID_ARGS", "name and userId required"))
+        guard let name = args?["name"] as? String else {
+            result(flutterError("INVALID_ARGS", "name required"))
             return
         }
-        let success = sdk?.getUserHelper().changeName(name, user: user) ?? false
-        if success {
-            result(nil)
-        } else {
-            result(flutterError("USER_ERROR", "changeName failed"))
-        }
+        guard let user = requireUser(args, result) else { return }
+        reply(sdk?.getUserHelper().changeName(name, user: user) ?? false,
+              result, "USER_ERROR", "changeName")
     }
 }
