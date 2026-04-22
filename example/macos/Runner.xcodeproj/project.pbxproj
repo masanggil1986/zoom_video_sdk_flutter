@@ -241,6 +241,7 @@
 				33CC110E2044A8840003C045 /* Bundle Framework */,
 				3399D490228B24CF009A79C7 /* ShellScript */,
 				E79D0BE574D6E922A6727D78 /* [CP] Embed Pods Frameworks */,
+				66758C4A4E6F7DDEF20CE6BD /* [Zoom] Copy Video SDK resources */,
 			);
 			buildRules = (
 			);
@@ -360,6 +361,24 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "\"$FLUTTER_ROOT\"/packages/flutter_tools/bin/macos_assemble.sh && touch Flutter/ephemeral/tripwire";
+		};
+		66758C4A4E6F7DDEF20CE6BD /* [Zoom] Copy Video SDK resources */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "[Zoom] Copy Video SDK resources";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -e\nSRC=\"${SRCROOT}/Flutter/ephemeral/.symlinks/plugins/zoom_video_sdk_flutter/macos/Frameworks\"\nDEST=\"${TARGET_BUILD_DIR}/${PRODUCT_NAME}.app/Contents/Frameworks\"\nmkdir -p \"$DEST\"\nshopt -s nullglob\nfor item in \"$SRC\"/*.bundle \"$SRC\"/*.app; do\n  rsync -a \"$item\" \"$DEST/\"\ndone\n";
 		};
 		9152CEC4450EFF2F6D7D48D9 /* [CP] Check Pods Manifest.lock */ = {
 			isa = PBXShellScriptBuildPhase;

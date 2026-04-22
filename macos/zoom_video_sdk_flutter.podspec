@@ -19,11 +19,12 @@ and place it in macos/Frameworks/ before building.
   s.source_files = 'Classes/**/*.swift'
 
   s.vendored_frameworks = Dir['Frameworks/*.framework']
-  s.vendored_libraries  = Dir['Frameworks/lib*.dylib', 'Frameworks/VideoSDK.dylib']
+  # VideoSDK.dylib는 lib 접두사가 없어 링커가 -l로 찾지 못한다. libVideoSDK.dylib
+  # 심볼릭 링크를 통해서만 vendored_libraries에 포함시켜 중복 참조를 피한다.
+  s.vendored_libraries  = Dir['Frameworks/lib*.dylib']
   s.resources           = Dir['Frameworks/*.bundle', 'Frameworks/*.app']
-  s.preserve_paths      = 'Frameworks/**'
+  s.preserve_paths      = 'Frameworks/**', 'Frameworks/VideoSDK.dylib'
 
-  # VideoSDK.dylib는 lib 접두사가 없어 vendored_libraries로 처리 불가 — 직접 링크
   s.user_target_xcconfig = {
     'LD_RUNPATH_SEARCH_PATHS' => '$(inherited) @executable_path/../Frameworks',
   }
@@ -34,10 +35,9 @@ and place it in macos/Frameworks/ before building.
   s.pod_target_xcconfig = {
     'DEFINES_MODULE' => 'YES',
     'LD_RUNPATH_SEARCH_PATHS' => '$(inherited) @executable_path/../Frameworks @loader_path/../Frameworks',
-    'FRAMEWORK_SEARCH_PATHS' => '$(inherited) "${PODS_ROOT}/../.symlinks/plugins/zoom_video_sdk_flutter/macos/Frameworks" "${PODS_TARGET_SRCROOT}/Frameworks"',
-    'LIBRARY_SEARCH_PATHS' => '$(inherited) "${PODS_ROOT}/../.symlinks/plugins/zoom_video_sdk_flutter/macos/Frameworks" "${PODS_TARGET_SRCROOT}/Frameworks" "${BUILT_PRODUCTS_DIR}"',
-    'OTHER_LDFLAGS' => '$(inherited)',
-    'SWIFT_INCLUDE_PATHS' => '$(inherited) "${PODS_ROOT}/../.symlinks/plugins/zoom_video_sdk_flutter/macos/Frameworks" "${PODS_TARGET_SRCROOT}/Frameworks"',
+    'FRAMEWORK_SEARCH_PATHS' => '$(inherited) "${PODS_TARGET_SRCROOT}/Frameworks"',
+    'LIBRARY_SEARCH_PATHS' => '$(inherited) "${PODS_TARGET_SRCROOT}/Frameworks" "${BUILT_PRODUCTS_DIR}"',
+    'SWIFT_INCLUDE_PATHS' => '$(inherited) "${PODS_TARGET_SRCROOT}/Frameworks"',
   }
   s.swift_version = '5.0'
 end

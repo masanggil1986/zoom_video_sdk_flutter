@@ -77,12 +77,12 @@ class ZoomInitConfig {
   /// [appGroupId] is required on iOS for screen sharing
   /// (Broadcast Upload Extension).
   const ZoomInitConfig({
-    this.domain = 'zoom.us',
+    this.domain = 'https://zoom.us',
     this.enableLog = true,
     this.appGroupId,
   });
 
-  /// Zoom service domain.
+  /// Zoom service domain. Must include scheme (e.g. `https://zoom.us`).
   final String domain;
 
   /// Whether SDK logging is enabled.
@@ -834,7 +834,7 @@ class ZoomUserHelper {
 /// Usage:
 /// ```dart
 /// final sdk = ZoomVideoSdk();
-/// await sdk.init(const ZoomInitConfig(domain: 'zoom.us'));
+/// await sdk.init(const ZoomInitConfig(domain: 'https://zoom.us'));
 /// await sdk.joinSession(ZoomJoinSessionConfig(
 ///   sessionName: 'my-session',
 ///   userName: 'Alice',

@@ -39,4 +39,28 @@ post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_macos_build_settings(target)
   end
+
+  # Zoom Video SDK는 .bundle / .app 리소스를 앱 번들의 Contents/Frameworks/ 에서
+  # 찾아 동적으로 로드한다. CocoaPods는 s.resources 로 지정된 리소스를 여기에
+  # 복사해주지 않으므로, Runner 타겟에 직접 복사 스크립트를 주입한다.
+  runner_aggregate = installer.aggregate_targets.find { |t| t.name == 'Pods-Runner' }
+  if runner_aggregate
+    runner_aggregate.user_project.targets.each do |target|
+      next unless target.name == 'Runner'
+      phase_name = '[Zoom] Copy Video SDK resources'
+      phase = target.shell_script_build_phases.find { |p| p.name == phase_name }
+      phase ||= target.new_shell_script_build_phase(phase_name)
+      phase.shell_script = <<~SCRIPT
+        set -e
+        SRC="${SRCROOT}/Flutter/ephemeral/.symlinks/plugins/zoom_video_sdk_flutter/macos/Frameworks"
+        DEST="${TARGET_BUILD_DIR}/${PRODUCT_NAME}.app/Contents/Frameworks"
+        mkdir -p "$DEST"
+        shopt -s nullglob
+        for item in "$SRC"/*.bundle "$SRC"/*.app; do
+          rsync -a "$item" "$DEST/"
+        done
+      SCRIPT
+    end
+    runner_aggregate.user_project.save
+  end
 end
