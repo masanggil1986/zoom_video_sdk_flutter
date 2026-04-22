@@ -375,6 +375,23 @@
 			outputFileListPaths = (
 			);
 			outputPaths = (
+				"$(TARGET_BUILD_DIR)/$(PRODUCT_NAME).app/Contents/Frameworks/CptHost.app",
+				"$(TARGET_BUILD_DIR)/$(PRODUCT_NAME).app/Contents/Frameworks/aomhost.app",
+				"$(TARGET_BUILD_DIR)/$(PRODUCT_NAME).app/Contents/Frameworks/capHost.app",
+				"$(TARGET_BUILD_DIR)/$(PRODUCT_NAME).app/Contents/Frameworks/ZoomTelemetry.bundle",
+				"$(TARGET_BUILD_DIR)/$(PRODUCT_NAME).app/Contents/Frameworks/annoter.bundle",
+				"$(TARGET_BUILD_DIR)/$(PRODUCT_NAME).app/Contents/Frameworks/aomagent.bundle",
+				"$(TARGET_BUILD_DIR)/$(PRODUCT_NAME).app/Contents/Frameworks/libmpg123_mac.bundle",
+				"$(TARGET_BUILD_DIR)/$(PRODUCT_NAME).app/Contents/Frameworks/mcm.bundle",
+				"$(TARGET_BUILD_DIR)/$(PRODUCT_NAME).app/Contents/Frameworks/ssb_sdk.bundle",
+				"$(TARGET_BUILD_DIR)/$(PRODUCT_NAME).app/Contents/Frameworks/viperex.bundle",
+				"$(TARGET_BUILD_DIR)/$(PRODUCT_NAME).app/Contents/Frameworks/zData.bundle",
+				"$(TARGET_BUILD_DIR)/$(PRODUCT_NAME).app/Contents/Frameworks/zNet.bundle",
+				"$(TARGET_BUILD_DIR)/$(PRODUCT_NAME).app/Contents/Frameworks/zPSApp.bundle",
+				"$(TARGET_BUILD_DIR)/$(PRODUCT_NAME).app/Contents/Frameworks/zVideoApp.bundle",
+				"$(TARGET_BUILD_DIR)/$(PRODUCT_NAME).app/Contents/Frameworks/zVideoAppPlugin.bundle",
+				"$(TARGET_BUILD_DIR)/$(PRODUCT_NAME).app/Contents/Frameworks/zWebService.bundle",
+				"$(TARGET_BUILD_DIR)/$(PRODUCT_NAME).app/Contents/Frameworks/zlt.bundle",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;

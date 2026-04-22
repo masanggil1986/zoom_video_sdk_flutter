@@ -48,46 +48,46 @@ extension ZoomEventStreamHandler: ZMVideoSDKDelegate {
         ])
     }
 
-    func onUserJoin(_ helper: ZMVideoSDKUserHelper?, userList userArray: [ZMVideoSDKUser]?) {
+    func onUserJoin(_ helper: ZMVideoSDKUserHelper, userList userArray: [ZMVideoSDKUser]?) {
         sendEvent(type: "userJoined", data: [
             "users": ZoomSerializer.serializeUserList(userArray),
         ])
     }
 
-    func onUserLeave(_ helper: ZMVideoSDKUserHelper?, userList userArray: [ZMVideoSDKUser]?) {
+    func onUserLeave(_ helper: ZMVideoSDKUserHelper, userList userArray: [ZMVideoSDKUser]?) {
         sendEvent(type: "userLeft", data: [
             "users": ZoomSerializer.serializeUserList(userArray),
         ])
     }
 
-    func onUserVideoStatusChanged(_ videoHelper: ZMVideoSDKVideoHelper?, userList userArray: [ZMVideoSDKUser]?) {
+    func onUserVideoStatusChanged(_ videoHelper: ZMVideoSDKVideoHelper, userList userArray: [ZMVideoSDKUser]?) {
         guard let user = userArray?.first else { return }
         sendEvent(type: "userVideoStatusChanged", data: [
             "user": ZoomSerializer.serializeUser(user),
         ])
     }
 
-    func onUserAudioStatusChanged(_ audioHelper: ZMVideoSDKAudioHelper?, userList userArray: [ZMVideoSDKUser]?) {
+    func onUserAudioStatusChanged(_ audioHelper: ZMVideoSDKAudioHelper, userList userArray: [ZMVideoSDKUser]?) {
         guard let user = userArray?.first else { return }
         sendEvent(type: "userAudioStatusChanged", data: [
             "user": ZoomSerializer.serializeUser(user),
         ])
     }
 
-    func onUserActiveAudioChanged(_ audioHelper: ZMVideoSDKAudioHelper?, userList userArray: [ZMVideoSDKUser]?) {
+    func onUserActiveAudioChanged(_ audioHelper: ZMVideoSDKAudioHelper, userList userArray: [ZMVideoSDKUser]?) {
         sendEvent(type: "userActiveAudioChanged", data: [
             "activeUsers": ZoomSerializer.serializeUserList(userArray),
         ])
     }
 
-    func onChatNewMessageNotify(_ chatHelper: ZMVideoSDKChatHelper?, chatMessage: ZMVideoSDKChatMessage?) {
+    func onChatNewMessageNotify(_ chatHelper: ZMVideoSDKChatHelper, chatMessage: ZMVideoSDKChatMessage?) {
         guard let message = chatMessage else { return }
         sendEvent(type: "chatMessageReceived", data: [
             "message": ZoomSerializer.serializeChatMessage(message),
         ])
     }
 
-    func onUserShareStatusChanged(_ shareHelper: ZMVideoSDKShareHelper?, user: ZMVideoSDKUser?, shareAction: ZMVideoSDKShareAction?) {
+    func onUserShareStatusChanged(_ shareHelper: ZMVideoSDKShareHelper, user: ZMVideoSDKUser?, shareAction: ZMVideoSDKShareAction?) {
         guard let user = user else { return }
         let status = shareAction?.shareStatus ?? ZMVideoSDKShareStatus_None
         sendEvent(type: "userShareStatusChanged", data: [
@@ -96,7 +96,7 @@ extension ZoomEventStreamHandler: ZMVideoSDKDelegate {
         ])
     }
 
-    func onUserHostChanged(_ userHelper: ZMVideoSDKUserHelper?, user: ZMVideoSDKUser?) {
+    func onUserHostChanged(_ userHelper: ZMVideoSDKUserHelper, user: ZMVideoSDKUser?) {
         guard let user = user else { return }
         sendEvent(type: "userHostChanged", data: [
             "newHost": ZoomSerializer.serializeUser(user),
@@ -118,11 +118,11 @@ extension ZoomEventStreamHandler: ZMVideoSDKDelegate {
         ])
     }
 
-    func onSessionNeedPassword(_ handle: ZMVideoSDKPasswordHandler?) {
+    func onSessionNeedPassword(_ handle: ZMVideoSDKPasswordHandler) {
         sendEvent(type: "sessionNeedPassword")
     }
 
-    func onSessionPasswordWrong(_ handle: ZMVideoSDKPasswordHandler?) {
+    func onSessionPasswordWrong(_ handle: ZMVideoSDKPasswordHandler) {
         sendEvent(type: "sessionPasswordWrong")
     }
 }

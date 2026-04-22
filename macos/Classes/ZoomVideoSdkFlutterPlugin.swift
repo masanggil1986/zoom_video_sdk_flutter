@@ -371,8 +371,8 @@ private extension ZoomVideoSdkFlutterPlugin {
         }
         // mic 목록에서 찾기
         if let micList = helper.getMicList(),
-           let device = micList.first(where: { ($0.deviceId ?? "") == deviceId }) {
-            let err = helper.selectMic(device.deviceId ?? "", deviceName: device.deviceName ?? "")
+           let device = micList.first(where: { $0.deviceId == deviceId }) {
+            let err = helper.selectMic(device.deviceId, deviceName: device.deviceName)
             if err == ZMVideoSDKErrors_Success {
                 result(nil)
                 return
@@ -380,8 +380,8 @@ private extension ZoomVideoSdkFlutterPlugin {
         }
         // speaker 목록에서 찾기
         if let speakerList = helper.getSpeakerList(),
-           let device = speakerList.first(where: { ($0.deviceId ?? "") == deviceId }) {
-            let err = helper.selectSpeaker(device.deviceId ?? "", deviceName: device.deviceName ?? "")
+           let device = speakerList.first(where: { $0.deviceId == deviceId }) {
+            let err = helper.selectSpeaker(device.deviceId, deviceName: device.deviceName)
             if err == ZMVideoSDKErrors_Success {
                 result(nil)
                 return
