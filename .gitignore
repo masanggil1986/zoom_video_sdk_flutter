@@ -33,3 +33,11 @@ migrate_working_dir/
 .flutter-plugins-dependencies
 /build/
 /coverage/
+
+# Zoom Video SDK binaries (macOS)
+# Download manually from https://developers.zoom.us/docs/video-sdk/
+macos/Frameworks/*
+!macos/Frameworks/.gitkeep
+
+# Claude Code internal instructions
+CLAUDE.md
