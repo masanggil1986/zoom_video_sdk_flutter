@@ -19,6 +19,9 @@ public class ZoomVideoSdkFlutterPlugin: NSObject, FlutterPlugin {
         )
         instance.eventStreamHandler = ZoomEventStreamHandler()
         eventChannel.setStreamHandler(instance.eventStreamHandler)
+
+        let viewFactory = ZoomVideoPlatformViewFactory(messenger: registrar.messenger)
+        registrar.register(viewFactory, withId: ZoomVideoPlatformViewFactory.viewTypeId)
     }
 
     // MARK: - Dispatch

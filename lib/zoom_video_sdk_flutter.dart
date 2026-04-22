@@ -9,6 +9,7 @@ library;
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 // ---------------------------------------------------------------------------
@@ -351,6 +352,52 @@ class ZoomVirtualBackgroundItem {
 
   final String imageName;
   final String imagePath;
+}
+
+// ---------------------------------------------------------------------------
+// Video rendering
+// ---------------------------------------------------------------------------
+
+/// What the [ZoomVideoView] should render.
+enum ZoomVideoKind {
+  /// The user's camera feed.
+  video,
+
+  /// The user's active screen share.
+  share,
+}
+
+/// Widget that renders a Zoom user's video or share canvas.
+///
+/// Internally backed by a platform view that subscribes to the native
+/// `ZMVideoSDKVideoCanvas`. On platforms without a video view implementation,
+/// a black placeholder is shown.
+///
+/// **Platform support:** Android ❌ iOS ❌ Windows ❌ macOS ✅
+class ZoomVideoView extends StatelessWidget {
+  const ZoomVideoView({
+    super.key,
+    required this.userId,
+    this.kind = ZoomVideoKind.video,
+  });
+
+  final String userId;
+  final ZoomVideoKind kind;
+
+  static const String _viewType = 'zoom_video_sdk_flutter/video_view';
+
+  @override
+  Widget build(BuildContext context) {
+    final params = {'userId': userId, 'kind': kind.name};
+    if (defaultTargetPlatform == TargetPlatform.macOS) {
+      return AppKitView(
+        viewType: _viewType,
+        creationParams: params,
+        creationParamsCodec: const StandardMessageCodec(),
+      );
+    }
+    return const ColoredBox(color: Colors.black);
+  }
 }
 
 // ---------------------------------------------------------------------------

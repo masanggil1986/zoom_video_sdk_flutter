@@ -6,6 +6,8 @@ import 'package:zoom_video_sdk_flutter/zoom_video_sdk_flutter.dart';
 
 import 'event_formatter.dart';
 import 'event_log.dart';
+import 'settings_drawer.dart';
+import 'video_tile.dart';
 
 class SessionScreen extends StatefulWidget {
   const SessionScreen({super.key, required this.sdk});
@@ -20,24 +22,17 @@ class _SessionScreenState extends State<SessionScreen> {
   static const int _logCap = 200;
 
   StreamSubscription<ZoomEvent>? _eventsSub;
+  final _scaffoldKey = GlobalKey<ScaffoldState>();
   final List<String> _logEntries = [];
 
   ZoomSessionInfo? _sessionInfo;
   ZoomUser? _myself;
   List<ZoomUser> _users = [];
 
-  final _chatMessageCtrl = TextEditingController();
-  final _vbPathCtrl = TextEditingController();
-  final _vbRemoveCtrl = TextEditingController();
+  /// User currently screen-sharing — derived from `UserShareStatusChangedEvent`.
+  String? _sharingUserId;
 
-  String? _chatReceiverId;
-  ZoomNoiseSuppression _noiseLevel = ZoomNoiseSuppression.auto_;
-  bool _micOriginalInput = false;
-  bool _shareDeviceAudio = false;
-  bool _shareWithDeviceAudio = false;
-  bool _shareOptimizeForVideo = false;
-  ZoomVideoPreferenceMode _videoPreferenceMode =
-      ZoomVideoPreferenceMode.balance;
+  bool _showLog = false;
 
   @override
   void initState() {
@@ -52,9 +47,6 @@ class _SessionScreenState extends State<SessionScreen> {
   @override
   void dispose() {
     _eventsSub?.cancel();
-    _chatMessageCtrl.dispose();
-    _vbPathCtrl.dispose();
-    _vbRemoveCtrl.dispose();
     super.dispose();
   }
 
@@ -85,20 +77,24 @@ class _SessionScreenState extends State<SessionScreen> {
         _refreshUsers();
       case UserManagerChangedEvent(:final user):
         _applyUserUpdate(user);
+      case UserShareStatusChangedEvent(:final user, :final status):
+        _applyUserUpdate(user);
+        if (!mounted) return;
+        setState(() {
+          _sharingUserId = status == ZoomShareStatus.started
+              ? user.userId
+              : null;
+        });
       case SessionJoinedEvent():
       case SessionNeedPasswordEvent():
       case SessionPasswordWrongEvent():
       case UserActiveAudioChangedEvent():
-      case UserShareStatusChangedEvent():
       case ChatMessageReceivedEvent():
       case ErrorEvent():
         break;
     }
   }
 
-  /// Replace the matching user in [_users] (and [_myself] if it's self) with
-  /// the version carried by the event — avoids relying on a re-fetch that may
-  /// return stale data.
   void _applyUserUpdate(ZoomUser updated) {
     if (!mounted) return;
     setState(() {
@@ -205,159 +201,239 @@ class _SessionScreenState extends State<SessionScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final sharingUser = _sharingUserId == null
+        ? null
+        : _users.firstWhere(
+            (u) => u.userId == _sharingUserId,
+            orElse: () => const ZoomUser(userId: '', userName: ''),
+          );
+    final sharingUserValid =
+        sharingUser != null && sharingUser.userId.isNotEmpty;
+
     return Scaffold(
+      key: _scaffoldKey,
+      backgroundColor: const Color(0xFF1B1B1F),
+      endDrawer: SettingsDrawer(
+        sdk: widget.sdk,
+        myself: _myself,
+        actions: SessionActions(runAction: _runAction, runQuery: _runQuery),
+      ),
       appBar: AppBar(
+        backgroundColor: const Color(0xFF2A2A30),
+        foregroundColor: Colors.white,
+        elevation: 0,
         title: Text(_sessionInfo?.sessionName ?? 'Session'),
         actions: [
           IconButton(
-            icon: const Icon(Icons.logout),
-            tooltip: 'Leave',
-            onPressed: _onLeavePressed,
+            tooltip: _showLog ? 'Hide log' : 'Show log',
+            icon: Icon(_showLog ? Icons.notes : Icons.notes_outlined),
+            onPressed: () => setState(() => _showLog = !_showLog),
+          ),
+          IconButton(
+            tooltip: 'Settings',
+            icon: const Icon(Icons.settings),
+            onPressed: () => _scaffoldKey.currentState?.openEndDrawer(),
           ),
         ],
       ),
       body: Column(
         children: [
-          _sessionInfoBanner(),
           Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(8),
-              child: Column(
-                children: [
-                  _participantsSection(),
-                  _audioSection(),
-                  _videoSection(),
-                  _shareSection(),
-                  _chatSection(),
-                  _recordingSection(),
-                  _virtualBackgroundSection(),
-                ],
-              ),
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: sharingUserValid
+                  ? _ShareLayout(
+                      sharingUser: sharingUser,
+                      otherUsers: _users
+                          .where((u) => u.userId != sharingUser.userId)
+                          .toList(),
+                      myselfId: _myself?.userId,
+                      onUserTap: _showUserActions,
+                    )
+                  : _VideoGrid(
+                      users: _users,
+                      myselfId: _myself?.userId,
+                      onUserTap: _showUserActions,
+                    ),
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.all(8),
-            child: EventLogPanel(
-              entries: _logEntries,
-              onClear: () => setState(_logEntries.clear),
+          if (_showLog)
+            Container(
+              color: const Color(0xFF2A2A30),
+              padding: const EdgeInsets.all(8),
+              child: EventLogPanel(
+                entries: _logEntries,
+                onClear: () => setState(_logEntries.clear),
+              ),
             ),
+          _ControlBar(
+            myself: _myself,
+            onToggleAudio: _onToggleAudio,
+            onToggleVideo: _onToggleVideo,
+            onToggleShare: _onToggleShare,
+            onOpenChat: _onOpenChat,
+            onOpenParticipants: _onOpenParticipants,
+            onLeave: _onLeavePressed,
+            isSharing: _sharingUserId == _myself?.userId,
           ),
         ],
       ),
     );
   }
 
-  // ---- Section: Session info ----
+  // ---- Control bar actions ----
 
-  Widget _sessionInfoBanner() {
-    final info = _sessionInfo;
+  Future<void> _onToggleAudio() async {
     final me = _myself;
-    return Card(
-      margin: const EdgeInsets.all(8),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+    if (me == null) return;
+    final audio = me.audioStatus;
+    final audioStarted = audio != null && audio.audioType != ZoomAudioType.none;
+    if (!audioStarted) {
+      await _runAction('startAudio', widget.sdk.audioHelper.startAudio);
+      return;
+    }
+    if (audio.isMuted) {
+      await _runAction(
+        'unmuteAudio',
+        () => widget.sdk.audioHelper.unmuteAudio(me.userId),
+      );
+    } else {
+      await _runAction(
+        'muteAudio',
+        () => widget.sdk.audioHelper.muteAudio(me.userId),
+      );
+    }
+  }
+
+  Future<void> _onToggleVideo() async {
+    final videoOn = _myself?.videoStatus?.isOn ?? false;
+    if (videoOn) {
+      await _runAction('stopVideo', widget.sdk.videoHelper.stopVideo);
+    } else {
+      await _runAction('startVideo', widget.sdk.videoHelper.startVideo);
+    }
+  }
+
+  Future<void> _onToggleShare() async {
+    if (_sharingUserId == _myself?.userId) {
+      await _runAction('stopShare', widget.sdk.shareHelper.stopShare);
+      return;
+    }
+    await _pickShareSource();
+  }
+
+  Future<void> _pickShareSource() async {
+    final sources = await _runQuery(
+      'getShareSourceList',
+      widget.sdk.shareHelper.getShareSourceList,
+    );
+    if (sources == null || !mounted) return;
+    const option = ZoomShareOption();
+    final screens = sources
+        .where((s) => s.type == ZoomShareSourceType.screen)
+        .toList();
+    final windows = sources
+        .where((s) => s.type == ZoomShareSourceType.window)
+        .toList();
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.6,
+        maxChildSize: 0.9,
+        builder: (_, controller) => ListView(
+          controller: controller,
           children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    info == null
-                        ? 'Session: (loading)'
-                        : 'Session: ${info.sessionName}',
-                    style: const TextStyle(fontWeight: FontWeight.bold),
+            const Padding(
+              padding: EdgeInsets.all(16),
+              child: Text(
+                'Pick a source to share',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+            ),
+            if (screens.isNotEmpty) ...[
+              const _SectionLabel('Monitors'),
+              ...screens.map(
+                (s) => ListTile(
+                  leading: const Icon(Icons.desktop_windows),
+                  title: Text(s.name),
+                  subtitle: Text(
+                    s.sourceId,
+                    style: const TextStyle(fontSize: 11),
                   ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.refresh),
-                  tooltip: 'Refresh session info',
-                  onPressed: () async {
-                    await _refreshSession();
-                    await _refreshUsers();
+                  onTap: () {
+                    Navigator.of(ctx).pop();
+                    _runAction(
+                      'startShareScreen',
+                      () => widget.sdk.shareHelper.startShareScreen(
+                        monitorId: s.sourceId,
+                        option: option,
+                      ),
+                    );
                   },
                 ),
-              ],
-            ),
-            if (info != null) Text('ID: ${info.sessionId}'),
-            if (me != null)
-              Wrap(
-                spacing: 8,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  Text('Me: ${me.userName} (${me.userId})'),
-                  if (me.isHost) _badge('HOST', Colors.blue),
-                  if (me.isManager) _badge('MANAGER', Colors.green),
-                ],
               ),
+            ],
+            if (windows.isNotEmpty) ...[
+              const _SectionLabel('Windows'),
+              ...windows.map(
+                (s) => ListTile(
+                  leading: const Icon(Icons.window),
+                  title: Text(s.name),
+                  subtitle: Text(
+                    s.sourceId,
+                    style: const TextStyle(fontSize: 11),
+                  ),
+                  onTap: () {
+                    Navigator.of(ctx).pop();
+                    _runAction(
+                      'startShareView',
+                      () => widget.sdk.shareHelper.startShareView(
+                        s.sourceId,
+                        option: option,
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
           ],
         ),
       ),
     );
   }
 
-  Widget _badge(String text, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Text(
-        text,
-        style: const TextStyle(color: Colors.white, fontSize: 10),
-      ),
-    );
-  }
-
-  // ---- Section: Participants ----
-
-  Widget _participantsSection() {
-    return Card(
-      child: ExpansionTile(
-        initiallyExpanded: true,
-        title: Text('Participants (${_users.length})'),
-        trailing: IconButton(
-          icon: const Icon(Icons.refresh),
-          onPressed: _refreshUsers,
-        ),
-        children: _users.map(_participantTile).toList(),
+  Future<void> _onOpenChat() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) => _ChatSheet(
+        sdk: widget.sdk,
+        users: _users,
+        myselfId: _myself?.userId,
+        onAction: _runAction,
+        onQuery: _runQuery,
       ),
     );
   }
 
-  Widget _participantTile(ZoomUser user) {
-    final audio = user.audioStatus;
-    final audioConnected =
-        audio != null && audio.audioType != ZoomAudioType.none;
-    final video = user.videoStatus;
-    return ListTile(
-      dense: true,
-      leading: CircleAvatar(
-        child: Text(user.userName.characters.firstOrNull ?? '?'),
+  Future<void> _onOpenParticipants() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) => _ParticipantsSheet(
+        users: _users,
+        myselfId: _myself?.userId,
+        onTap: (u) {
+          Navigator.of(ctx).pop();
+          _showUserActions(u);
+        },
+        onRefresh: () {
+          Navigator.of(ctx).pop();
+          _refreshUsers();
+        },
       ),
-      title: Text(user.userName),
-      subtitle: Text(user.userId, style: const TextStyle(fontSize: 11)),
-      trailing: Wrap(
-        spacing: 4,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        children: [
-          if (user.isHost) _badge('H', Colors.blue),
-          if (user.isManager) _badge('M', Colors.green),
-          Icon(
-            audioConnected
-                ? (audio.isMuted ? Icons.mic_off : Icons.mic)
-                : Icons.mic_off_outlined,
-            size: 18,
-            color: audio?.isTalking == true ? Colors.green : null,
-          ),
-          Icon(
-            video?.isOn == true ? Icons.videocam : Icons.videocam_off,
-            size: 18,
-          ),
-        ],
-      ),
-      onLongPress: () => _showUserActions(user),
     );
   }
 
@@ -429,844 +505,186 @@ class _SessionScreenState extends State<SessionScreen> {
         );
     }
   }
+}
 
-  // ---- Section: Audio ----
+// ---------------------------------------------------------------------------
+// Layouts
+// ---------------------------------------------------------------------------
 
-  Widget _audioSection() {
-    final myId = _myself?.userId;
-    final audio = _myself?.audioStatus;
-    // Zoom SDK may return AudioStatus with audioType=none after stopAudio;
-    // treat that as "not started" so Start audio re-enables.
+class _VideoGrid extends StatelessWidget {
+  const _VideoGrid({
+    required this.users,
+    required this.myselfId,
+    required this.onUserTap,
+  });
+
+  final List<ZoomUser> users;
+  final String? myselfId;
+  final void Function(ZoomUser) onUserTap;
+
+  @override
+  Widget build(BuildContext context) {
+    if (users.isEmpty) {
+      return const Center(
+        child: Text(
+          'No participants yet',
+          style: TextStyle(color: Colors.white54),
+        ),
+      );
+    }
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final count = users.length;
+        final cols = switch (count) {
+          1 => 1,
+          2 => 2,
+          <= 4 => 2,
+          _ => 3,
+        };
+        return GridView.builder(
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: cols,
+            mainAxisSpacing: 8,
+            crossAxisSpacing: 8,
+            childAspectRatio: 16 / 9,
+          ),
+          itemCount: count,
+          itemBuilder: (_, i) {
+            final u = users[i];
+            return VideoTile(
+              user: u,
+              isSelf: u.userId == myselfId,
+              onTap: () => onUserTap(u),
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+class _ShareLayout extends StatelessWidget {
+  const _ShareLayout({
+    required this.sharingUser,
+    required this.otherUsers,
+    required this.myselfId,
+    required this.onUserTap,
+  });
+
+  final ZoomUser sharingUser;
+  final List<ZoomUser> otherUsers;
+  final String? myselfId;
+  final void Function(ZoomUser) onUserTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Expanded(
+          child: VideoTile(
+            user: sharingUser,
+            isSelf: sharingUser.userId == myselfId,
+            kind: ZoomVideoKind.share,
+          ),
+        ),
+        const SizedBox(height: 8),
+        SizedBox(
+          height: 100,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: otherUsers.length,
+            separatorBuilder: (_, _) => const SizedBox(width: 8),
+            itemBuilder: (_, i) {
+              final u = otherUsers[i];
+              return AspectRatio(
+                aspectRatio: 16 / 9,
+                child: VideoTile(
+                  user: u,
+                  isSelf: u.userId == myselfId,
+                  onTap: () => onUserTap(u),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Bottom control bar
+// ---------------------------------------------------------------------------
+
+class _ControlBar extends StatelessWidget {
+  const _ControlBar({
+    required this.myself,
+    required this.onToggleAudio,
+    required this.onToggleVideo,
+    required this.onToggleShare,
+    required this.onOpenChat,
+    required this.onOpenParticipants,
+    required this.onLeave,
+    required this.isSharing,
+  });
+
+  final ZoomUser? myself;
+  final VoidCallback onToggleAudio;
+  final VoidCallback onToggleVideo;
+  final VoidCallback onToggleShare;
+  final VoidCallback onOpenChat;
+  final VoidCallback onOpenParticipants;
+  final VoidCallback onLeave;
+  final bool isSharing;
+
+  @override
+  Widget build(BuildContext context) {
+    final audio = myself?.audioStatus;
     final audioStarted = audio != null && audio.audioType != ZoomAudioType.none;
-    final isMuted = audio?.isMuted ?? true;
-    return Card(
-      child: ExpansionTile(
-        title: Row(
-          children: [
-            const Text('Audio'),
-            const SizedBox(width: 8),
-            Icon(
-              audioStarted
-                  ? (isMuted ? Icons.mic_off : Icons.mic)
-                  : Icons.headset_off,
-              size: 16,
-              color: audioStarted && !isMuted ? Colors.green : null,
-            ),
-          ],
-        ),
-        initiallyExpanded: true,
+    final isMuted = !audioStarted || audio.isMuted;
+    final videoOn = myself?.videoStatus?.isOn ?? false;
+
+    return Container(
+      color: const Color(0xFF2A2A30),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 4,
-                  children: [
-                    ElevatedButton.icon(
-                      icon: const Icon(Icons.headset),
-                      label: const Text('Start audio'),
-                      onPressed: audioStarted
-                          ? null
-                          : () => _runAction(
-                              'startAudio',
-                              widget.sdk.audioHelper.startAudio,
-                            ),
-                    ),
-                    ElevatedButton.icon(
-                      icon: const Icon(Icons.headset_off),
-                      label: const Text('Stop audio'),
-                      onPressed: !audioStarted
-                          ? null
-                          : () => _runAction(
-                              'stopAudio',
-                              widget.sdk.audioHelper.stopAudio,
-                            ),
-                    ),
-                    ElevatedButton.icon(
-                      icon: const Icon(Icons.mic_off),
-                      label: const Text('Mute'),
-                      onPressed: (myId == null || !audioStarted || isMuted)
-                          ? null
-                          : () => _runAction(
-                              'muteAudio(self)',
-                              () => widget.sdk.audioHelper.muteAudio(myId),
-                            ),
-                    ),
-                    ElevatedButton.icon(
-                      icon: const Icon(Icons.mic),
-                      label: const Text('Unmute'),
-                      onPressed: (myId == null || !audioStarted || !isMuted)
-                          ? null
-                          : () => _runAction(
-                              'unmuteAudio(self)',
-                              () => widget.sdk.audioHelper.unmuteAudio(myId),
-                            ),
-                    ),
-                  ],
-                ),
-                SwitchListTile(
-                  dense: true,
-                  title: const Text('Mic original input'),
-                  value: _micOriginalInput,
-                  onChanged: (v) async {
-                    setState(() => _micOriginalInput = v);
-                    await _runAction(
-                      'enableMicOriginalInput',
-                      () => widget.sdk.audioHelper.enableMicOriginalInput(v),
-                    );
-                  },
-                ),
-                Row(
-                  children: [
-                    const Text('Noise suppression: '),
-                    DropdownButton<ZoomNoiseSuppression>(
-                      value: _noiseLevel,
-                      items: ZoomNoiseSuppression.values
-                          .map(
-                            (l) =>
-                                DropdownMenuItem(value: l, child: Text(l.name)),
-                          )
-                          .toList(),
-                      onChanged: (level) async {
-                        if (level == null) return;
-                        setState(() => _noiseLevel = level);
-                        await _runAction(
-                          'setNoiseSuppression',
-                          () =>
-                              widget.sdk.audioHelper.setNoiseSuppression(level),
-                        );
-                      },
-                    ),
-                  ],
-                ),
-                OutlinedButton(
-                  onPressed: _onListAudioDevices,
-                  child: const Text('List audio devices'),
-                ),
-              ],
-            ),
+          _ControlButton(
+            icon: isMuted ? Icons.mic_off : Icons.mic,
+            label: audioStarted ? (isMuted ? 'Unmute' : 'Mute') : 'Start audio',
+            color: audioStarted && !isMuted ? Colors.white : Colors.redAccent,
+            onPressed: onToggleAudio,
           ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _onListAudioDevices() async {
-    final devices = await _runQuery(
-      'getAudioDeviceList',
-      widget.sdk.audioHelper.getAudioDeviceList,
-    );
-    if (devices == null || !mounted) return;
-    await showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Audio devices'),
-        content: devices.isEmpty
-            ? const Text('(none)')
-            : SizedBox(
-                width: double.maxFinite,
-                child: ListView(
-                  shrinkWrap: true,
-                  children: devices
-                      .map(
-                        (d) => ListTile(
-                          title: Text(d.deviceName),
-                          subtitle: Text(
-                            d.deviceId,
-                            style: const TextStyle(fontSize: 11),
-                          ),
-                          onTap: () async {
-                            Navigator.of(ctx).pop();
-                            await _runAction(
-                              'selectAudioDevice',
-                              () => widget.sdk.audioHelper.selectAudioDevice(
-                                d.deviceId,
-                              ),
-                            );
-                          },
-                        ),
-                      )
-                      .toList(),
-                ),
-              ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Close'),
+          _ControlButton(
+            icon: videoOn ? Icons.videocam : Icons.videocam_off,
+            label: videoOn ? 'Stop video' : 'Start video',
+            color: videoOn ? Colors.white : Colors.redAccent,
+            onPressed: onToggleVideo,
           ),
-        ],
-      ),
-    );
-  }
-
-  // ---- Section: Video ----
-
-  Widget _videoSection() {
-    final videoOn = _myself?.videoStatus?.isOn ?? false;
-    return Card(
-      child: ExpansionTile(
-        title: Row(
-          children: [
-            const Text('Video'),
-            const SizedBox(width: 8),
-            Icon(
-              videoOn ? Icons.videocam : Icons.videocam_off,
-              size: 16,
-              color: videoOn ? Colors.green : null,
-            ),
-          ],
-        ),
-        initiallyExpanded: true,
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 4,
-                  children: [
-                    ElevatedButton.icon(
-                      icon: const Icon(Icons.videocam),
-                      label: const Text('Start video'),
-                      onPressed: videoOn
-                          ? null
-                          : () => _runAction(
-                              'startVideo',
-                              widget.sdk.videoHelper.startVideo,
-                            ),
-                    ),
-                    ElevatedButton.icon(
-                      icon: const Icon(Icons.videocam_off),
-                      label: const Text('Stop video'),
-                      onPressed: !videoOn
-                          ? null
-                          : () => _runAction(
-                              'stopVideo',
-                              widget.sdk.videoHelper.stopVideo,
-                            ),
-                    ),
-                    OutlinedButton.icon(
-                      icon: const Icon(Icons.cameraswitch),
-                      label: const Text('Select camera'),
-                      onPressed: _onListCameras,
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    const Text('Quality preference: '),
-                    DropdownButton<ZoomVideoPreferenceMode>(
-                      value: _videoPreferenceMode,
-                      items: ZoomVideoPreferenceMode.values
-                          .map(
-                            (m) =>
-                                DropdownMenuItem(value: m, child: Text(m.name)),
-                          )
-                          .toList(),
-                      onChanged: (mode) async {
-                        if (mode == null) return;
-                        setState(() => _videoPreferenceMode = mode);
-                        await _runAction(
-                          'setVideoQualityPreference',
-                          () => widget.sdk.videoHelper
-                              .setVideoQualityPreference(mode),
-                        );
-                      },
-                    ),
-                  ],
-                ),
-              ],
-            ),
+          _ControlButton(
+            icon: isSharing ? Icons.stop_screen_share : Icons.screen_share,
+            label: isSharing ? 'Stop share' : 'Share',
+            color: isSharing ? Colors.blueAccent : Colors.white,
+            onPressed: onToggleShare,
           ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _onListCameras() async {
-    final cameras = await _runQuery(
-      'getCameraList',
-      widget.sdk.videoHelper.getCameraList,
-    );
-    if (cameras == null || !mounted) return;
-    await showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Cameras'),
-        content: cameras.isEmpty
-            ? const Text('(none)')
-            : SizedBox(
-                width: double.maxFinite,
-                child: ListView(
-                  shrinkWrap: true,
-                  children: cameras
-                      .map(
-                        (c) => ListTile(
-                          title: Text(c.deviceName),
-                          subtitle: Text(
-                            c.deviceId,
-                            style: const TextStyle(fontSize: 11),
-                          ),
-                          onTap: () async {
-                            Navigator.of(ctx).pop();
-                            await _runAction(
-                              'selectCamera',
-                              () => widget.sdk.videoHelper.selectCamera(
-                                c.deviceId,
-                              ),
-                            );
-                          },
-                        ),
-                      )
-                      .toList(),
-                ),
-              ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Close'),
+          _ControlButton(
+            icon: Icons.chat_bubble_outline,
+            label: 'Chat',
+            color: Colors.white,
+            onPressed: onOpenChat,
           ),
-        ],
-      ),
-    );
-  }
-
-  // ---- Section: Share ----
-
-  Widget _shareSection() {
-    return Card(
-      child: ExpansionTile(
-        title: const Text('Share'),
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 4,
-                  children: [
-                    ElevatedButton.icon(
-                      icon: const Icon(Icons.screen_share),
-                      label: const Text('Pick source & share'),
-                      onPressed: _onPickShareSource,
-                    ),
-                    ElevatedButton.icon(
-                      icon: const Icon(Icons.stop_screen_share),
-                      label: const Text('Stop share'),
-                      onPressed: () => _runAction(
-                        'stopShare',
-                        widget.sdk.shareHelper.stopShare,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                CheckboxListTile(
-                  dense: true,
-                  contentPadding: EdgeInsets.zero,
-                  controlAffinity: ListTileControlAffinity.leading,
-                  title: const Text('Include device audio in share'),
-                  value: _shareWithDeviceAudio,
-                  onChanged: (v) =>
-                      setState(() => _shareWithDeviceAudio = v ?? false),
-                ),
-                CheckboxListTile(
-                  dense: true,
-                  contentPadding: EdgeInsets.zero,
-                  controlAffinity: ListTileControlAffinity.leading,
-                  title: const Text(
-                    'Optimize for video (smoother motion, lower detail)',
-                  ),
-                  subtitle: const Text(
-                    'Applies on share start. Use the button below to toggle mid-share.',
-                    style: TextStyle(fontSize: 11),
-                  ),
-                  value: _shareOptimizeForVideo,
-                  onChanged: (v) {
-                    final next = v ?? false;
-                    setState(() => _shareOptimizeForVideo = next);
-                  },
-                ),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: OutlinedButton.icon(
-                    icon: const Icon(Icons.tune),
-                    label: Text(
-                      _shareOptimizeForVideo
-                          ? 'Disable video optimization (runtime)'
-                          : 'Enable video optimization (runtime)',
-                    ),
-                    onPressed: () async {
-                      final next = !_shareOptimizeForVideo;
-                      await _runAction(
-                        'enableOptimizeForSharedVideo($next)',
-                        () => widget.sdk.shareHelper
-                            .enableOptimizeForSharedVideo(next),
-                      );
-                      if (mounted) {
-                        setState(() => _shareOptimizeForVideo = next);
-                      }
-                    },
-                  ),
-                ),
-                SwitchListTile(
-                  dense: true,
-                  title: const Text('Share device audio (desktop)'),
-                  value: _shareDeviceAudio,
-                  onChanged: (v) async {
-                    setState(() => _shareDeviceAudio = v);
-                    await _runAction(
-                      'enableShareDeviceAudio',
-                      () => widget.sdk.shareHelper.enableShareDeviceAudio(v),
-                    );
-                  },
-                ),
-              ],
-            ),
+          _ControlButton(
+            icon: Icons.people_outline,
+            label: 'People',
+            color: Colors.white,
+            onPressed: onOpenParticipants,
           ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _onPickShareSource() async {
-    final sources = await _runQuery(
-      'getShareSourceList',
-      widget.sdk.shareHelper.getShareSourceList,
-    );
-    if (sources == null || !mounted) return;
-    final option = ZoomShareOption(
-      withDeviceAudio: _shareWithDeviceAudio,
-      optimizeForSharedVideo: _shareOptimizeForVideo,
-    );
-    final screens = sources
-        .where((s) => s.type == ZoomShareSourceType.screen)
-        .toList();
-    final windows = sources
-        .where((s) => s.type == ZoomShareSourceType.window)
-        .toList();
-    await showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Pick a source to share'),
-        content: SizedBox(
-          width: double.maxFinite,
-          height: 400,
-          child: ListView(
-            shrinkWrap: true,
-            children: [
-              if (screens.isNotEmpty) ...[
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  child: Text(
-                    'Monitors',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                ),
-                ...screens.map(
-                  (s) => ListTile(
-                    dense: true,
-                    leading: const Icon(Icons.desktop_windows),
-                    title: Text(s.name),
-                    subtitle: Text(
-                      s.sourceId,
-                      style: const TextStyle(fontSize: 11),
-                    ),
-                    onTap: () {
-                      Navigator.of(ctx).pop();
-                      _runAction(
-                        'startShareScreen(${s.sourceId})',
-                        () => widget.sdk.shareHelper.startShareScreen(
-                          monitorId: s.sourceId,
-                          option: option,
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ],
-              if (windows.isNotEmpty) ...[
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  child: Text(
-                    'Windows',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                ),
-                ...windows.map(
-                  (s) => ListTile(
-                    dense: true,
-                    leading: const Icon(Icons.window),
-                    title: Text(s.name),
-                    subtitle: Text(
-                      s.sourceId,
-                      style: const TextStyle(fontSize: 11),
-                    ),
-                    onTap: () {
-                      Navigator.of(ctx).pop();
-                      _runAction(
-                        'startShareView(${s.sourceId})',
-                        () => widget.sdk.shareHelper.startShareView(
-                          s.sourceId,
-                          option: option,
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Close'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ---- Section: Chat ----
-
-  Widget _chatSection() {
-    final recipients = _users
-        .where((u) => u.userId != _myself?.userId)
-        .toList();
-    // Dropdown이 존재하지 않는 userId를 선택 중이면 값으로 취급하지 않는다.
-    // setState는 하지 않는다 — build 중 상태 변경 금지.
-    final selectedReceiver =
-        (_chatReceiverId != null &&
-            recipients.any((u) => u.userId == _chatReceiverId))
-        ? _chatReceiverId
-        : null;
-    return Card(
-      child: ExpansionTile(
-        title: const Text('Chat'),
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                TextField(
-                  controller: _chatMessageCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Message',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    ElevatedButton(
-                      onPressed: _onSendChatToAll,
-                      child: const Text('Send to all'),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: DropdownButton<String>(
-                        isExpanded: true,
-                        hint: const Text('Recipient'),
-                        value: selectedReceiver,
-                        items: recipients
-                            .map(
-                              (u) => DropdownMenuItem(
-                                value: u.userId,
-                                child: Text(u.userName),
-                              ),
-                            )
-                            .toList(),
-                        onChanged: (v) => setState(() => _chatReceiverId = v),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    ElevatedButton(
-                      onPressed: _onSendPrivateChat,
-                      child: const Text('Send private'),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  children: [
-                    OutlinedButton(
-                      onPressed: () async {
-                        final v = await _runQuery(
-                          'isChatDisabled',
-                          widget.sdk.chatHelper.isChatDisabled,
-                        );
-                        if (v != null && mounted) {
-                          _log('isChatDisabled: $v');
-                        }
-                      },
-                      child: const Text('Chat disabled?'),
-                    ),
-                    OutlinedButton(
-                      onPressed: () async {
-                        final v = await _runQuery(
-                          'isPrivateChatDisabled',
-                          widget.sdk.chatHelper.isPrivateChatDisabled,
-                        );
-                        if (v != null && mounted) {
-                          _log('isPrivateChatDisabled: $v');
-                        }
-                      },
-                      child: const Text('Private chat disabled?'),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _onSendChatToAll() {
-    final msg = _chatMessageCtrl.text.trim();
-    if (msg.isEmpty) {
-      _log('Enter a message');
-      return;
-    }
-    _runAction(
-      'sendChatToAll',
-      () => widget.sdk.chatHelper.sendChatToAll(msg),
-    ).then((_) {
-      if (mounted) _chatMessageCtrl.clear();
-    });
-  }
-
-  void _onSendPrivateChat() {
-    final msg = _chatMessageCtrl.text.trim();
-    final receiver = _chatReceiverId;
-    if (msg.isEmpty || receiver == null) {
-      _log('Pick a recipient and enter a message');
-      return;
-    }
-    _runAction(
-      'sendChatToUser',
-      () => widget.sdk.chatHelper.sendChatToUser(receiver, msg),
-    ).then((_) {
-      if (mounted) _chatMessageCtrl.clear();
-    });
-  }
-
-  // ---- Section: Recording ----
-
-  Widget _recordingSection() {
-    return Card(
-      child: ExpansionTile(
-        title: const Text('Recording'),
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Wrap(
-              spacing: 8,
-              runSpacing: 4,
-              children: [
-                OutlinedButton(
-                  onPressed: () async {
-                    final v = await _runQuery(
-                      'canStartRecording',
-                      widget.sdk.recordingHelper.canStartRecording,
-                    );
-                    if (v != null && mounted) {
-                      _log('canStartRecording: $v');
-                    }
-                  },
-                  child: const Text('Can start? (desktop)'),
-                ),
-                ElevatedButton(
-                  onPressed: () => _runAction(
-                    'startCloudRecording',
-                    widget.sdk.recordingHelper.startCloudRecording,
-                  ),
-                  child: const Text('Start cloud recording'),
-                ),
-                ElevatedButton(
-                  onPressed: () => _runAction(
-                    'stopCloudRecording',
-                    widget.sdk.recordingHelper.stopCloudRecording,
-                  ),
-                  child: const Text('Stop cloud recording'),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ---- Section: Virtual Background ----
-
-  Widget _virtualBackgroundSection() {
-    return Card(
-      child: ExpansionTile(
-        title: const Text('Virtual background'),
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 4,
-                  children: [
-                    OutlinedButton(
-                      onPressed: () async {
-                        final v = await _runQuery(
-                          'isSupported',
-                          widget.sdk.virtualBackgroundHelper.isSupported,
-                        );
-                        if (v != null && mounted) _log('isSupported: $v');
-                      },
-                      child: const Text('Supported?'),
-                    ),
-                    OutlinedButton(
-                      onPressed: _onListVirtualBackgrounds,
-                      child: const Text('List items'),
-                    ),
-                    OutlinedButton(
-                      onPressed: () async {
-                        final item = await _runQuery(
-                          'getSelectedItem',
-                          widget.sdk.virtualBackgroundHelper.getSelectedItem,
-                        );
-                        if (!mounted) return;
-                        _log('selected: ${item?.imageName ?? "(none)"}');
-                      },
-                      child: const Text('Get selected'),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _vbPathCtrl,
-                        decoration: const InputDecoration(
-                          labelText: 'Image file path',
-                          border: OutlineInputBorder(),
-                          isDense: true,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    ElevatedButton(
-                      onPressed: () {
-                        final path = _vbPathCtrl.text.trim();
-                        if (path.isEmpty) {
-                          _log('Enter a file path');
-                          return;
-                        }
-                        _runAction(
-                          'addItem',
-                          () =>
-                              widget.sdk.virtualBackgroundHelper.addItem(path),
-                        );
-                      },
-                      child: const Text('Add'),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _vbRemoveCtrl,
-                        decoration: const InputDecoration(
-                          labelText: 'Image name to remove',
-                          border: OutlineInputBorder(),
-                          isDense: true,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    ElevatedButton(
-                      onPressed: () {
-                        final name = _vbRemoveCtrl.text.trim();
-                        if (name.isEmpty) {
-                          _log('Enter an image name');
-                          return;
-                        }
-                        _runAction(
-                          'removeItem',
-                          () => widget.sdk.virtualBackgroundHelper.removeItem(
-                            name,
-                          ),
-                        );
-                      },
-                      child: const Text('Remove'),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _onListVirtualBackgrounds() async {
-    final items = await _runQuery(
-      'getItemList',
-      widget.sdk.virtualBackgroundHelper.getItemList,
-    );
-    if (items == null || !mounted) return;
-    await showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Virtual backgrounds'),
-        content: items.isEmpty
-            ? const Text('(none)')
-            : SizedBox(
-                width: double.maxFinite,
-                child: ListView(
-                  shrinkWrap: true,
-                  children: items
-                      .map(
-                        (item) => ListTile(
-                          title: Text(item.imageName),
-                          subtitle: Text(
-                            item.imagePath,
-                            style: const TextStyle(fontSize: 11),
-                          ),
-                          onTap: () async {
-                            Navigator.of(ctx).pop();
-                            await _runAction(
-                              'setItem',
-                              () => widget.sdk.virtualBackgroundHelper.setItem(
-                                item.imageName,
-                              ),
-                            );
-                          },
-                        ),
-                      )
-                      .toList(),
-                ),
-              ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Close'),
+          _ControlButton(
+            icon: Icons.call_end,
+            label: 'Leave',
+            color: Colors.redAccent,
+            onPressed: onLeave,
           ),
         ],
       ),
@@ -1274,9 +692,326 @@ class _SessionScreenState extends State<SessionScreen> {
   }
 }
 
-// ---- Private types ----
+class _ControlButton extends StatelessWidget {
+  const _ControlButton({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.onPressed,
+  });
 
-enum _LeaveChoice { cancel, leave, endForAll }
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(6),
+      onTap: onPressed,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: color),
+            const SizedBox(height: 2),
+            Text(label, style: TextStyle(color: color, fontSize: 11)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Chat sheet
+// ---------------------------------------------------------------------------
+
+class _ChatSheet extends StatefulWidget {
+  const _ChatSheet({
+    required this.sdk,
+    required this.users,
+    required this.myselfId,
+    required this.onAction,
+    required this.onQuery,
+  });
+
+  final ZoomVideoSdk sdk;
+  final List<ZoomUser> users;
+  final String? myselfId;
+  final Future<void> Function(String, Future<void> Function()) onAction;
+  final Future<T?> Function<T>(String, Future<T> Function()) onQuery;
+
+  @override
+  State<_ChatSheet> createState() => _ChatSheetState();
+}
+
+class _ChatSheetState extends State<_ChatSheet> {
+  final _ctrl = TextEditingController();
+  String? _receiverId;
+  final List<ZoomChatMessage> _messages = [];
+  StreamSubscription<ChatMessageReceivedEvent>? _sub;
+
+  @override
+  void initState() {
+    super.initState();
+    _sub = widget.sdk.onChatMessageReceived.listen((e) {
+      if (!mounted) return;
+      setState(() => _messages.insert(0, e.message));
+    });
+  }
+
+  @override
+  void dispose() {
+    _sub?.cancel();
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final recipients = widget.users
+        .where((u) => u.userId != widget.myselfId)
+        .toList();
+    final selected =
+        (_receiverId != null && recipients.any((u) => u.userId == _receiverId))
+        ? _receiverId
+        : null;
+    return Padding(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+        left: 16,
+        right: 16,
+        top: 16,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Text(
+            'Chat',
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            height: 200,
+            child: _messages.isEmpty
+                ? const Center(
+                    child: Text(
+                      'No messages yet',
+                      style: TextStyle(color: Colors.black54),
+                    ),
+                  )
+                : ListView.builder(
+                    reverse: true,
+                    itemCount: _messages.length,
+                    itemBuilder: (_, i) {
+                      final m = _messages[i];
+                      return ListTile(
+                        dense: true,
+                        title: Text(
+                          '${m.senderUser.userName}${m.isChatToAll ? "" : " → ${m.receiverUser?.userName ?? ""}"}',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        subtitle: Text(m.content),
+                      );
+                    },
+                  ),
+          ),
+          const Divider(),
+          TextField(
+            controller: _ctrl,
+            decoration: const InputDecoration(
+              labelText: 'Message',
+              border: OutlineInputBorder(),
+              isDense: true,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: DropdownButton<String?>(
+                  isExpanded: true,
+                  hint: const Text('Everyone'),
+                  value: selected,
+                  items: [
+                    const DropdownMenuItem<String?>(
+                      value: null,
+                      child: Text('Everyone'),
+                    ),
+                    ...recipients.map(
+                      (u) => DropdownMenuItem<String?>(
+                        value: u.userId,
+                        child: Text(u.userName),
+                      ),
+                    ),
+                  ],
+                  onChanged: (v) => setState(() => _receiverId = v),
+                ),
+              ),
+              const SizedBox(width: 8),
+              ElevatedButton(onPressed: _onSend, child: const Text('Send')),
+            ],
+          ),
+          const SizedBox(height: 12),
+        ],
+      ),
+    );
+  }
+
+  void _onSend() {
+    final msg = _ctrl.text.trim();
+    if (msg.isEmpty) return;
+    final receiver = _receiverId;
+    widget
+        .onAction(
+          receiver == null ? 'sendChatToAll' : 'sendChatToUser',
+          () => receiver == null
+              ? widget.sdk.chatHelper.sendChatToAll(msg)
+              : widget.sdk.chatHelper.sendChatToUser(receiver, msg),
+        )
+        .then((_) {
+          if (mounted) _ctrl.clear();
+        });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Participants sheet
+// ---------------------------------------------------------------------------
+
+class _ParticipantsSheet extends StatelessWidget {
+  const _ParticipantsSheet({
+    required this.users,
+    required this.myselfId,
+    required this.onTap,
+    required this.onRefresh,
+  });
+
+  final List<ZoomUser> users;
+  final String? myselfId;
+  final void Function(ZoomUser) onTap;
+  final VoidCallback onRefresh;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Participants (${users.length})',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.refresh),
+                  onPressed: onRefresh,
+                ),
+              ],
+            ),
+          ),
+          Flexible(
+            child: ListView.builder(
+              shrinkWrap: true,
+              itemCount: users.length,
+              itemBuilder: (_, i) {
+                final u = users[i];
+                final audio = u.audioStatus;
+                final audioConnected =
+                    audio != null && audio.audioType != ZoomAudioType.none;
+                final video = u.videoStatus;
+                return ListTile(
+                  leading: CircleAvatar(
+                    child: Text(u.userName.characters.firstOrNull ?? '?'),
+                  ),
+                  title: Text(
+                    u.userId == myselfId ? '${u.userName} (You)' : u.userName,
+                  ),
+                  subtitle: Wrap(
+                    spacing: 6,
+                    children: [
+                      if (u.isHost)
+                        const _ParticipantChip(
+                          label: 'HOST',
+                          color: Colors.blue,
+                        ),
+                      if (u.isManager)
+                        const _ParticipantChip(
+                          label: 'MGR',
+                          color: Colors.green,
+                        ),
+                    ],
+                  ),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        audioConnected
+                            ? (audio.isMuted ? Icons.mic_off : Icons.mic)
+                            : Icons.mic_off_outlined,
+                        size: 18,
+                        color: audio?.isTalking == true ? Colors.green : null,
+                      ),
+                      const SizedBox(width: 4),
+                      Icon(
+                        video?.isOn == true
+                            ? Icons.videocam
+                            : Icons.videocam_off,
+                        size: 18,
+                      ),
+                    ],
+                  ),
+                  onTap: () => onTap(u),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ParticipantChip extends StatelessWidget {
+  const _ParticipantChip({required this.label, required this.color});
+
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(color: Colors.white, fontSize: 10),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// User actions sheet (mute/name/private chat/etc.)
+// ---------------------------------------------------------------------------
 
 enum _UserAction {
   makeHost,
@@ -1411,3 +1146,26 @@ class _UserActionsSheetState extends State<_UserActionsSheet> {
     );
   }
 }
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+class _SectionLabel extends StatelessWidget {
+  const _SectionLabel(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      child: Text(
+        text,
+        style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.grey),
+      ),
+    );
+  }
+}
+
+enum _LeaveChoice { cancel, leave, endForAll }
