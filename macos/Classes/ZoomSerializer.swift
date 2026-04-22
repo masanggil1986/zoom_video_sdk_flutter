@@ -57,7 +57,7 @@ enum ZoomSerializer {
 
     static func serializeChatMessage(_ msg: ZMVideoSDKChatMessage) -> [String: Any] {
         var dict: [String: Any] = [
-            "content": msg.content ?? "",
+            "content": msg.content,
             "isChatToAll": msg.isChatToAll,
             "isSelfSend": msg.isSelfSend,
             "timestamp": Int64(msg.timeStamp),
@@ -77,22 +77,22 @@ enum ZoomSerializer {
 
     static func serializeSpeakerDevice(_ device: ZMVideoSDKSpeakerDevice) -> [String: Any] {
         return [
-            "deviceId": device.deviceId ?? "",
-            "deviceName": device.deviceName ?? "",
+            "deviceId": device.deviceId,
+            "deviceName": device.deviceName,
         ]
     }
 
     static func serializeMicDevice(_ device: ZMVideoSDKMicDevice) -> [String: Any] {
         return [
-            "deviceId": device.deviceId ?? "",
-            "deviceName": device.deviceName ?? "",
+            "deviceId": device.deviceId,
+            "deviceName": device.deviceName,
         ]
     }
 
     static func serializeCameraDevice(_ device: ZMVideoSDKCameraDevice) -> [String: Any] {
         return [
-            "deviceId": device.deviceID ?? "",
-            "deviceName": device.deviceName ?? "",
+            "deviceId": device.deviceID,
+            "deviceName": device.deviceName,
         ]
     }
 
