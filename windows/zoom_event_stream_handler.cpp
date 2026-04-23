@@ -38,6 +38,7 @@ void ZoomEventStreamHandler::SendEvent(const std::string& type,
 
 void ZoomEventStreamHandler::onSessionJoin() {
   SendEvent("sessionJoined");
+  if (user_state_listener_) user_state_listener_();
 }
 
 void ZoomEventStreamHandler::onSessionLeave() {
@@ -65,6 +66,7 @@ void ZoomEventStreamHandler::onUserJoin(
   data[flutter::EncodableValue("users")] =
       flutter::EncodableValue(SerializeUserList(userList));
   SendEvent("userJoined", data);
+  if (user_state_listener_) user_state_listener_();
 }
 
 void ZoomEventStreamHandler::onUserLeave(
@@ -83,6 +85,7 @@ void ZoomEventStreamHandler::onUserVideoStatusChanged(
   data[flutter::EncodableValue("user")] =
       flutter::EncodableValue(SerializeUser(userList->GetItem(0)));
   SendEvent("userVideoStatusChanged", data);
+  if (user_state_listener_) user_state_listener_();
 }
 
 void ZoomEventStreamHandler::onUserAudioStatusChanged(
@@ -107,6 +110,7 @@ void ZoomEventStreamHandler::onUserShareStatusChanged(
   data[flutter::EncodableValue("status")] =
       flutter::EncodableValue(SerializeShareStatus(status));
   SendEvent("userShareStatusChanged", data);
+  if (user_state_listener_) user_state_listener_();
 }
 
 void ZoomEventStreamHandler::onChatNewMessageNotify(

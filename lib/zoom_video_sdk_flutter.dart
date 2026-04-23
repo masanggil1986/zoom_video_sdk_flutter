@@ -369,12 +369,12 @@ enum ZoomVideoKind {
 
 /// Widget that renders a Zoom user's video or share canvas.
 ///
-/// Internally backed by a platform view that subscribes to the native
-/// `ZMVideoSDKVideoCanvas`. On platforms without a video view implementation,
-/// a black placeholder is shown.
+/// Internally backed by a platform view (macOS) or a Flutter `Texture`
+/// driven by a native raw-data subscription (Windows). On platforms without
+/// a video view implementation, a black placeholder is shown.
 ///
-/// **Platform support:** Android ❌ iOS ❌ Windows ❌ macOS ✅
-class ZoomVideoView extends StatelessWidget {
+/// **Platform support:** Android ❌ iOS ❌ Windows ✅ macOS ✅
+class ZoomVideoView extends StatefulWidget {
   const ZoomVideoView({
     super.key,
     required this.userId,
@@ -384,16 +384,85 @@ class ZoomVideoView extends StatelessWidget {
   final String userId;
   final ZoomVideoKind kind;
 
+  @override
+  State<ZoomVideoView> createState() => _ZoomVideoViewState();
+}
+
+class _ZoomVideoViewState extends State<ZoomVideoView> {
   static const String _viewType = 'zoom_video_sdk_flutter/video_view';
+  static const MethodChannel _channel = MethodChannel('zoom_video_sdk_flutter');
+
+  int? _textureId;
+
+  @override
+  void initState() {
+    super.initState();
+    if (defaultTargetPlatform == TargetPlatform.windows) {
+      _createWindowsTexture();
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant ZoomVideoView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (defaultTargetPlatform == TargetPlatform.windows &&
+        (oldWidget.userId != widget.userId || oldWidget.kind != widget.kind)) {
+      _disposeWindowsTexture();
+      _createWindowsTexture();
+    }
+  }
+
+  @override
+  void dispose() {
+    if (defaultTargetPlatform == TargetPlatform.windows) {
+      _disposeWindowsTexture();
+    }
+    super.dispose();
+  }
+
+  Future<void> _createWindowsTexture() async {
+    try {
+      final id = await _channel.invokeMethod<int>('videoView.create', {
+        'userId': widget.userId,
+        'kind': widget.kind.name,
+      });
+      if (!mounted) {
+        if (id != null) {
+          await _channel.invokeMethod<void>('videoView.dispose', {
+            'textureId': id,
+          });
+        }
+        return;
+      }
+      setState(() => _textureId = id);
+    } on PlatformException {
+      // Fall through to black placeholder.
+    }
+  }
+
+  void _disposeWindowsTexture() {
+    final id = _textureId;
+    _textureId = null;
+    if (id == null) return;
+    _channel.invokeMethod<void>('videoView.dispose', {'textureId': id});
+  }
 
   @override
   Widget build(BuildContext context) {
-    final params = {'userId': userId, 'kind': kind.name};
+    final params = {'userId': widget.userId, 'kind': widget.kind.name};
     if (defaultTargetPlatform == TargetPlatform.macOS) {
       return AppKitView(
         viewType: _viewType,
         creationParams: params,
         creationParamsCodec: const StandardMessageCodec(),
+      );
+    }
+    if (defaultTargetPlatform == TargetPlatform.windows) {
+      final id = _textureId;
+      if (id == null) return const ColoredBox(color: Colors.black);
+      return ColoredBox(
+        color: Colors.black,
+        child: Texture(textureId: id),
       );
     }
     return const ColoredBox(color: Colors.black);
@@ -788,12 +857,6 @@ class ZoomShareHelper {
     await _channel.invokeMethod<void>('share.stopShare');
   }
 
-  /// Enables or disables sharing device audio alongside screen share.
-  /// Desktop only.
-  ///
-  /// **Platform support:** Android ❌ iOS ❌ Windows ✅ macOS ✅
-  ///
-  /// Throws [UnimplementedError] on Android and iOS.
   /// Toggles "optimize for video" on an active share — prioritizes frame rate
   /// over still-frame detail.
   ///
@@ -801,6 +864,8 @@ class ZoomShareHelper {
   /// Returns an error otherwise.
   ///
   /// **Platform support:** Android ❌ iOS ❌ Windows ✅ macOS ✅
+  ///
+  /// Throws [UnimplementedError] on Android and iOS.
   Future<void> enableOptimizeForSharedVideo(bool enable) async {
     _assertDesktopOnly('enableOptimizeForSharedVideo()');
     await _channel.invokeMethod<void>('share.enableOptimizeForSharedVideo', {
@@ -808,6 +873,12 @@ class ZoomShareHelper {
     });
   }
 
+  /// Enables or disables sharing device audio alongside screen share.
+  /// Desktop only.
+  ///
+  /// **Platform support:** Android ❌ iOS ❌ Windows ✅ macOS ✅
+  ///
+  /// Throws [UnimplementedError] on Android and iOS.
   Future<void> enableShareDeviceAudio(bool enable) async {
     _assertDesktopOnly('enableShareDeviceAudio()');
     await _channel.invokeMethod<void>('share.enableShareDeviceAudio', {

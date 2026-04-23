@@ -5,7 +5,8 @@ import 'package:zoom_video_sdk_flutter/zoom_video_sdk_flutter_method_channel.dar
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  MethodChannelZoomVideoSdkFlutter platform = MethodChannelZoomVideoSdkFlutter();
+  MethodChannelZoomVideoSdkFlutter platform =
+      MethodChannelZoomVideoSdkFlutter();
   const MethodChannel channel = MethodChannel('zoom_video_sdk_flutter');
 
   setUp(() {

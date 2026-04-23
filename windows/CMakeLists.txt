@@ -18,6 +18,8 @@ list(APPEND PLUGIN_SOURCES
   "zoom_video_sdk_flutter_plugin.h"
   "zoom_event_stream_handler.cpp"
   "zoom_event_stream_handler.h"
+  "zoom_video_texture_renderer.cpp"
+  "zoom_video_texture_renderer.h"
   "zoom_serializer.h"
 )
 
@@ -41,10 +43,17 @@ target_include_directories(${PLUGIN_NAME} PRIVATE
 target_link_libraries(${PLUGIN_NAME} PRIVATE flutter flutter_wrapper_plugin)
 target_link_libraries(${PLUGIN_NAME} PRIVATE "${ZOOM_SDK_LIB_DIR}/videosdk.lib")
 
-# Bundle all Zoom SDK DLLs with the application
-file(GLOB ZOOM_SDK_DLLS "${ZOOM_SDK_BIN_DIR}/*.dll")
+# Bundle ALL Zoom SDK runtime files — not just DLLs. Screen sharing
+# spawns zCSVCptHost.exe at runtime; without the .exe files (and
+# crashrpt_lang.ini for the crash reporter), startShareScreen /
+# startShareView fail with ZoomVideoSDKErrors_Internal_Error (2).
+file(GLOB ZOOM_SDK_RUNTIME_FILES
+  "${ZOOM_SDK_BIN_DIR}/*.dll"
+  "${ZOOM_SDK_BIN_DIR}/*.exe"
+  "${ZOOM_SDK_BIN_DIR}/*.ini"
+)
 set(zoom_video_sdk_flutter_bundled_libraries
-  ${ZOOM_SDK_DLLS}
+  ${ZOOM_SDK_RUNTIME_FILES}
   PARENT_SCOPE
 )
 
@@ -56,7 +65,7 @@ enable_testing()
 include(FetchContent)
 FetchContent_Declare(
   googletest
-  URL https://github.com/google/googletest/archive/release-1.11.0.zip
+  URL https://github.com/google/googletest/archive/refs/tags/v1.15.2.zip
 )
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 set(INSTALL_GTEST OFF CACHE BOOL "Disable installation of googletest" FORCE)

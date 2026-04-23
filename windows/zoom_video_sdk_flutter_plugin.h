@@ -4,12 +4,14 @@
 #include <flutter/event_channel.h>
 #include <flutter/method_channel.h>
 #include <flutter/plugin_registrar_windows.h>
+#include <flutter/texture_registrar.h>
 
 #include <memory>
 
 #include "zoom_video_sdk_api.h"
 #include "zoom_video_sdk_interface.h"
 #include "zoom_event_stream_handler.h"
+#include "zoom_video_texture_renderer.h"
 
 USING_ZOOM_VIDEO_SDK_NAMESPACE
 
@@ -32,6 +34,10 @@ class ZoomVideoSdkFlutterPlugin : public flutter::Plugin {
  private:
   IZoomVideoSDK* sdk_ = nullptr;
   ZoomEventStreamHandler* event_handler_ = nullptr;
+  std::unique_ptr<ZoomVideoTextureManager> texture_manager_;
+  // Top-level HWND of the Flutter host window — used to exclude our own
+  // window from share source enumeration.
+  HWND flutter_hwnd_ = nullptr;
 
   // SDK에서 userId로 유저 객체를 찾는 헬퍼
   IZoomVideoSDKUser* FindUser(const std::string& userId);
@@ -79,15 +85,29 @@ class ZoomVideoSdkFlutterPlugin : public flutter::Plugin {
       std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
   void HandleVideoGetCameraList(
       std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
+  void HandleVideoSelectCamera(const flutter::EncodableMap* args,
+      std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
+  void HandleVideoSetQualityPreference(const flutter::EncodableMap* args,
+      std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
+
+  // Video view (texture-based rendering)
+  void HandleVideoViewCreate(const flutter::EncodableMap* args,
+      std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
+  void HandleVideoViewDispose(const flutter::EncodableMap* args,
+      std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
 
   // Share
-  void HandleShareStartScreen(
+  void HandleShareStartScreen(const flutter::EncodableMap* args,
       std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
   void HandleShareStartView(const flutter::EncodableMap* args,
       std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
   void HandleShareStop(
       std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
   void HandleShareEnableDeviceAudio(const flutter::EncodableMap* args,
+      std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
+  void HandleShareEnableOptimizeForVideo(const flutter::EncodableMap* args,
+      std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
+  void HandleShareGetSourceList(
       std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
 
   // Chat

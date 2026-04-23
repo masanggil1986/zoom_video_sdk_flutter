@@ -20,6 +20,7 @@
 #include "helpers/zoom_video_sdk_chat_helper_interface.h"
 #include "helpers/zoom_video_sdk_recording_helper_interface.h"
 #include "helpers/zoom_video_sdk_user_helper_interface.h"
+#include "helpers/zoom_video_sdk_share_setting_interface.h"
 
 namespace zoom_video_sdk_flutter {
 
@@ -60,6 +61,31 @@ static const flutter::EncodableMap* GetMap(const flutter::EncodableMap* args,
   return std::get_if<flutter::EncodableMap>(&it->second);
 }
 
+// Dispatch a ZoomVideoSDKErrors outcome to a MethodResult. The result is
+// consumed either way.
+static void FinishResult(
+    std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result,
+    ZoomVideoSDKErrors err, const std::string& errorCode,
+    const std::string& opName) {
+  if (err == ZoomVideoSDKErrors_Success) {
+    result->Success();
+  } else {
+    result->Error(errorCode, opName + " failed: " + std::to_string(err));
+  }
+}
+
+// Dispatch a bool outcome (for SDK methods that return bool instead of an
+// error code) to a MethodResult.
+static void FinishResult(
+    std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result,
+    bool success, const std::string& errorCode, const std::string& opName) {
+  if (success) {
+    result->Success();
+  } else {
+    result->Error(errorCode, opName + " failed");
+  }
+}
+
 // static
 void ZoomVideoSdkFlutterPlugin::RegisterWithRegistrar(
     flutter::PluginRegistrarWindows* registrar) {
@@ -74,10 +100,23 @@ void ZoomVideoSdkFlutterPlugin::RegisterWithRegistrar(
           &flutter::StandardMethodCodec::GetInstance());
 
   auto plugin = std::make_unique<ZoomVideoSdkFlutterPlugin>();
+  plugin->texture_manager_ =
+      std::make_unique<ZoomVideoTextureManager>(registrar->texture_registrar());
+  if (auto* view = registrar->GetView()) {
+    plugin->flutter_hwnd_ = view->GetNativeWindow();
+  }
 
   // EventChannel에 StreamHandler 등록
   auto handler = std::make_unique<ZoomEventStreamHandler>();
   plugin->event_handler_ = handler.get();
+  // When users/video/share change, retry pending texture subscriptions so
+  // late-appearing video streams attach to their ZoomVideoView.
+  ZoomVideoSdkFlutterPlugin* plugin_raw = plugin.get();
+  handler->SetUserStateListener([plugin_raw]() {
+    if (plugin_raw->texture_manager_ && plugin_raw->sdk_) {
+      plugin_raw->texture_manager_->OnSessionStateChanged(plugin_raw->sdk_);
+    }
+  });
   event_channel->SetStreamHandler(std::move(handler));
 
   method_channel->SetMethodCallHandler(
@@ -91,6 +130,10 @@ void ZoomVideoSdkFlutterPlugin::RegisterWithRegistrar(
 ZoomVideoSdkFlutterPlugin::ZoomVideoSdkFlutterPlugin() {}
 
 ZoomVideoSdkFlutterPlugin::~ZoomVideoSdkFlutterPlugin() {
+  // Dispose textures (and thereby unsubscribe from any live pipes) before
+  // tearing down the SDK itself — Dispose needs the SDK to verify which
+  // pipes are still safe to unSubscribe from.
+  if (texture_manager_) texture_manager_->DisposeAll(sdk_);
   if (sdk_) {
     sdk_->removeListener(event_handler_);
     sdk_->cleanup();
@@ -152,16 +195,30 @@ void ZoomVideoSdkFlutterPlugin::HandleMethodCall(
     HandleVideoSwitchCamera(std::move(result));
   } else if (method == "video.getCameraList") {
     HandleVideoGetCameraList(std::move(result));
+  } else if (method == "video.selectCamera") {
+    HandleVideoSelectCamera(args, std::move(result));
+  } else if (method == "video.setVideoQualityPreference") {
+    HandleVideoSetQualityPreference(args, std::move(result));
+  }
+  // Video view
+  else if (method == "videoView.create") {
+    HandleVideoViewCreate(args, std::move(result));
+  } else if (method == "videoView.dispose") {
+    HandleVideoViewDispose(args, std::move(result));
   }
   // Share
   else if (method == "share.startShareScreen") {
-    HandleShareStartScreen(std::move(result));
+    HandleShareStartScreen(args, std::move(result));
   } else if (method == "share.startShareView") {
     HandleShareStartView(args, std::move(result));
   } else if (method == "share.stopShare") {
     HandleShareStop(std::move(result));
   } else if (method == "share.enableShareDeviceAudio") {
     HandleShareEnableDeviceAudio(args, std::move(result));
+  } else if (method == "share.enableOptimizeForSharedVideo") {
+    HandleShareEnableOptimizeForVideo(args, std::move(result));
+  } else if (method == "share.getShareSourceList") {
+    HandleShareGetSourceList(std::move(result));
   }
   // Chat
   else if (method == "chat.sendChatToAll") {
@@ -260,11 +317,22 @@ void ZoomVideoSdkFlutterPlugin::HandleInit(
   std::wstring domain = Utf8ToWide(GetString(args, "domain", "zoom.us"));
   params.domain = domain.c_str();
   params.enableLog = GetBool(args, "enableLog", true);
+  // Match Flutter's per-monitor DPI awareness, and use heap-mode raw data
+  // buffers — both needed to keep the share module stable under Flutter's
+  // ANGLE/D3D11 renderer.
+  params.permonitor_awareness_mode = true;
+  params.videoRawDataMemoryMode = ZoomVideoSDKRawDataMemoryModeHeap;
+  params.shareRawDataMemoryMode = ZoomVideoSDKRawDataMemoryModeHeap;
 
   auto err = sdk_->initialize(params);
   if (err == ZoomVideoSDKErrors_Success) {
-    if (event_handler_) {
-      sdk_->addListener(event_handler_);
+    if (event_handler_) sdk_->addListener(event_handler_);
+    // Prefer "Filtering" capture (modern GDI+composition with window
+    // filtering). Auto mode probes DXGI paths that conflict with Flutter's
+    // renderer on some systems.
+    if (auto* shareSetting = sdk_->getShareSettingHelper()) {
+      shareSetting->setScreenCaptureMode(
+          ZoomVideoSDKScreenCaptureMode_Filtering);
     }
     result->Success();
   } else {
@@ -298,6 +366,8 @@ void ZoomVideoSdkFlutterPlugin::HandleJoinSession(
   if (audioOpts) {
     ctx.audioOption.connect = GetBool(audioOpts, "connect", true);
     ctx.audioOption.mute = GetBool(audioOpts, "mute", false);
+    ctx.audioOption.autoAdjustSpeakerVolume =
+        GetBool(audioOpts, "autoAdjustSpeakerVolume", true);
   }
 
   auto* videoOpts = GetMap(args, "videoOptions");
@@ -398,71 +468,49 @@ void ZoomVideoSdkFlutterPlugin::HandleAudioStartAudio(
     std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
   auto err = sdk_ ? sdk_->getAudioHelper()->startAudio()
                   : ZoomVideoSDKErrors_Uninitialize;
-  if (err == ZoomVideoSDKErrors_Success) {
-    result->Success();
-  } else {
-    result->Error("AUDIO_ERROR", "startAudio failed: " + std::to_string(err));
-  }
+  FinishResult(std::move(result), err, "AUDIO_ERROR", "startAudio");
 }
 
 void ZoomVideoSdkFlutterPlugin::HandleAudioStopAudio(
     std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
   auto err = sdk_ ? sdk_->getAudioHelper()->stopAudio()
                   : ZoomVideoSDKErrors_Uninitialize;
-  if (err == ZoomVideoSDKErrors_Success) {
-    result->Success();
-  } else {
-    result->Error("AUDIO_ERROR", "stopAudio failed: " + std::to_string(err));
-  }
+  FinishResult(std::move(result), err, "AUDIO_ERROR", "stopAudio");
 }
 
 void ZoomVideoSdkFlutterPlugin::HandleAudioMuteAudio(
     const flutter::EncodableMap* args,
     std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
-  auto userId = GetString(args, "userId");
-  auto* user = FindUser(userId);
+  auto* user = FindUser(GetString(args, "userId"));
   if (!user) {
     result->Error("INVALID_ARGS", "User not found");
     return;
   }
-  auto err = sdk_->getAudioHelper()->muteAudio(user);
-  if (err == ZoomVideoSDKErrors_Success) {
-    result->Success();
-  } else {
-    result->Error("AUDIO_ERROR", "muteAudio failed: " + std::to_string(err));
-  }
+  FinishResult(std::move(result), sdk_->getAudioHelper()->muteAudio(user),
+               "AUDIO_ERROR", "muteAudio");
 }
 
 void ZoomVideoSdkFlutterPlugin::HandleAudioUnmuteAudio(
     const flutter::EncodableMap* args,
     std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
-  auto userId = GetString(args, "userId");
-  auto* user = FindUser(userId);
+  auto* user = FindUser(GetString(args, "userId"));
   if (!user) {
     result->Error("INVALID_ARGS", "User not found");
     return;
   }
-  auto err = sdk_->getAudioHelper()->unMuteAudio(user);
-  if (err == ZoomVideoSDKErrors_Success) {
-    result->Success();
-  } else {
-    result->Error("AUDIO_ERROR",
-                  "unmuteAudio failed: " + std::to_string(err));
-  }
+  FinishResult(std::move(result), sdk_->getAudioHelper()->unMuteAudio(user),
+               "AUDIO_ERROR", "unmuteAudio");
 }
 
 void ZoomVideoSdkFlutterPlugin::HandleAudioEnableMicOriginalInput(
     const flutter::EncodableMap* args,
     std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
   bool enable = GetBool(args, "enable", false);
-  auto err = sdk_ ? sdk_->getAudioSettingHelper()->enableMicOriginalInput(enable)
-                  : ZoomVideoSDKErrors_Uninitialize;
-  if (err == ZoomVideoSDKErrors_Success) {
-    result->Success();
-  } else {
-    result->Error("AUDIO_ERROR",
-                  "enableMicOriginalInput failed: " + std::to_string(err));
-  }
+  auto err = sdk_
+      ? sdk_->getAudioSettingHelper()->enableMicOriginalInput(enable)
+      : ZoomVideoSDKErrors_Uninitialize;
+  FinishResult(std::move(result), err, "AUDIO_ERROR",
+               "enableMicOriginalInput");
 }
 
 void ZoomVideoSdkFlutterPlugin::HandleAudioSetNoiseSuppression(
@@ -470,19 +518,20 @@ void ZoomVideoSdkFlutterPlugin::HandleAudioSetNoiseSuppression(
     std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
   auto levelStr = GetString(args, "level", "auto_");
   ZoomVideoSDKSuppressBackgroundNoiseLevel level;
-  if (levelStr == "low") level = ZoomVideoSDKSuppressBackgroundNoiseLevel_Low;
-  else if (levelStr == "medium") level = ZoomVideoSDKSuppressBackgroundNoiseLevel_Medium;
-  else if (levelStr == "high") level = ZoomVideoSDKSuppressBackgroundNoiseLevel_High;
-  else level = ZoomVideoSDKSuppressBackgroundNoiseLevel_Auto;
-
-  auto err = sdk_ ? sdk_->getAudioSettingHelper()->setSuppressBackgroundNoiseLevel(level)
-                  : ZoomVideoSDKErrors_Uninitialize;
-  if (err == ZoomVideoSDKErrors_Success) {
-    result->Success();
+  if (levelStr == "low") {
+    level = ZoomVideoSDKSuppressBackgroundNoiseLevel_Low;
+  } else if (levelStr == "medium") {
+    level = ZoomVideoSDKSuppressBackgroundNoiseLevel_Medium;
+  } else if (levelStr == "high") {
+    level = ZoomVideoSDKSuppressBackgroundNoiseLevel_High;
   } else {
-    result->Error("AUDIO_ERROR",
-                  "setNoiseSuppression failed: " + std::to_string(err));
+    level = ZoomVideoSDKSuppressBackgroundNoiseLevel_Auto;
   }
+
+  auto err = sdk_
+      ? sdk_->getAudioSettingHelper()->setSuppressBackgroundNoiseLevel(level)
+      : ZoomVideoSDKErrors_Uninitialize;
+  FinishResult(std::move(result), err, "AUDIO_ERROR", "setNoiseSuppression");
 }
 
 void ZoomVideoSdkFlutterPlugin::HandleAudioGetDeviceList(
@@ -578,32 +627,20 @@ void ZoomVideoSdkFlutterPlugin::HandleVideoStartVideo(
     std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
   auto err = sdk_ ? sdk_->getVideoHelper()->startVideo()
                   : ZoomVideoSDKErrors_Uninitialize;
-  if (err == ZoomVideoSDKErrors_Success) {
-    result->Success();
-  } else {
-    result->Error("VIDEO_ERROR", "startVideo failed: " + std::to_string(err));
-  }
+  FinishResult(std::move(result), err, "VIDEO_ERROR", "startVideo");
 }
 
 void ZoomVideoSdkFlutterPlugin::HandleVideoStopVideo(
     std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
   auto err = sdk_ ? sdk_->getVideoHelper()->stopVideo()
                   : ZoomVideoSDKErrors_Uninitialize;
-  if (err == ZoomVideoSDKErrors_Success) {
-    result->Success();
-  } else {
-    result->Error("VIDEO_ERROR", "stopVideo failed: " + std::to_string(err));
-  }
+  FinishResult(std::move(result), err, "VIDEO_ERROR", "stopVideo");
 }
 
 void ZoomVideoSdkFlutterPlugin::HandleVideoSwitchCamera(
     std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
   bool success = sdk_ ? sdk_->getVideoHelper()->switchCamera() : false;
-  if (success) {
-    result->Success();
-  } else {
-    result->Error("VIDEO_ERROR", "switchCamera failed");
-  }
+  FinishResult(std::move(result), success, "VIDEO_ERROR", "switchCamera");
 }
 
 void ZoomVideoSdkFlutterPlugin::HandleVideoGetCameraList(
@@ -621,24 +658,210 @@ void ZoomVideoSdkFlutterPlugin::HandleVideoGetCameraList(
   result->Success(flutter::EncodableValue(list));
 }
 
+void ZoomVideoSdkFlutterPlugin::HandleVideoSelectCamera(
+    const flutter::EncodableMap* args,
+    std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
+  auto deviceId = GetString(args, "deviceId");
+  if (deviceId.empty()) {
+    result->Error("INVALID_ARGS", "deviceId required");
+    return;
+  }
+  if (!sdk_) {
+    result->Error("VIDEO_ERROR", "Video helper not available");
+    return;
+  }
+  std::wstring wideId = Utf8ToWide(deviceId);
+  bool success = sdk_->getVideoHelper()->selectCamera(wideId.c_str());
+  FinishResult(std::move(result), success, "VIDEO_ERROR", "selectCamera");
+}
+
+void ZoomVideoSdkFlutterPlugin::HandleVideoSetQualityPreference(
+    const flutter::EncodableMap* args,
+    std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
+  if (!sdk_) {
+    result->Error("VIDEO_ERROR", "Video helper not available");
+    return;
+  }
+  auto modeStr = GetString(args, "mode", "balance");
+  ZoomVideoSDKVideoPreferenceSetting pref;
+  if (modeStr == "sharpness") {
+    pref.mode = ZoomVideoSDKVideoPreferenceMode_Sharpness;
+  } else if (modeStr == "smoothness") {
+    pref.mode = ZoomVideoSDKVideoPreferenceMode_Smoothness;
+  } else if (modeStr == "custom") {
+    pref.mode = ZoomVideoSDKVideoPreferenceMode_Custom;
+  } else {
+    pref.mode = ZoomVideoSDKVideoPreferenceMode_Balance;
+  }
+  int minFr = GetInt(args, "minimumFrameRate", 0);
+  int maxFr = GetInt(args, "maximumFrameRate", 0);
+  pref.minimum_frame_rate = static_cast<uint32_t>(minFr < 0 ? 0 : minFr);
+  pref.maximum_frame_rate = static_cast<uint32_t>(maxFr < 0 ? 0 : maxFr);
+
+  auto err = sdk_->getVideoHelper()->setVideoQualityPreference(pref);
+  FinishResult(std::move(result), err, "VIDEO_ERROR",
+               "setVideoQualityPreference");
+}
+
+// MARK: - Video view (texture)
+
+void ZoomVideoSdkFlutterPlugin::HandleVideoViewCreate(
+    const flutter::EncodableMap* args,
+    std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
+  auto userId = GetString(args, "userId");
+  auto kindStr = GetString(args, "kind", "video");
+  if (userId.empty()) {
+    result->Error("INVALID_ARGS", "userId required");
+    return;
+  }
+  if (!texture_manager_) {
+    result->Error("VIDEO_VIEW_ERROR", "Texture manager unavailable");
+    return;
+  }
+  auto kind = (kindStr == "share") ? ZoomVideoTextureRenderer::Kind::Share
+                                   : ZoomVideoTextureRenderer::Kind::Video;
+  int64_t textureId = texture_manager_->Create(sdk_, userId, kind);
+  result->Success(flutter::EncodableValue(textureId));
+}
+
+void ZoomVideoSdkFlutterPlugin::HandleVideoViewDispose(
+    const flutter::EncodableMap* args,
+    std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
+  if (!texture_manager_) {
+    result->Success();
+    return;
+  }
+  int64_t textureId = 0;
+  auto it = args ? args->find(flutter::EncodableValue("textureId"))
+                 : flutter::EncodableMap::const_iterator{};
+  if (args && it != args->end()) {
+    if (auto* v = std::get_if<int64_t>(&it->second)) textureId = *v;
+    else if (auto* v32 = std::get_if<int32_t>(&it->second))
+      textureId = *v32;
+  }
+  texture_manager_->Dispose(sdk_, textureId);
+  result->Success();
+}
+
 // MARK: - Share
 
+namespace {
+
+// Brief share state summary for failure messages — enough to distinguish
+// the common blockers (locked share, no multi-share, already sharing out)
+// without dumping the whole environment.
+std::string BuildShareDiagnostics(IZoomVideoSDKShareHelper* shareHelper) {
+  if (!shareHelper) return "(no share helper)";
+  return std::string("(sharingOut=") +
+         (shareHelper->isSharingOut() ? "1" : "0") +
+         " otherSharing=" + (shareHelper->isOtherSharing() ? "1" : "0") +
+         " locked=" + (shareHelper->isShareLocked() ? "1" : "0") +
+         " multiShare=" + (shareHelper->isMultiShareEnabled() ? "1" : "0") +
+         ")";
+}
+
+// Enumerate monitors via Win32 and emit {sourceId, name, type:"screen"}.
+BOOL CALLBACK MonitorEnumProc(HMONITOR hMonitor, HDC, LPRECT, LPARAM lParam) {
+  auto* out = reinterpret_cast<flutter::EncodableList*>(lParam);
+  MONITORINFOEXW info;
+  info.cbSize = sizeof(info);
+  if (!GetMonitorInfoW(hMonitor, &info)) return TRUE;
+
+  std::string deviceId = WideToUtf8(info.szDevice);
+  // Friendly name: fall back to device when DisplayDevice query fails.
+  std::string name = deviceId;
+  DISPLAY_DEVICEW dd;
+  dd.cb = sizeof(dd);
+  if (EnumDisplayDevicesW(info.szDevice, 0, &dd, 0)) {
+    std::string friendly = WideToUtf8(dd.DeviceString);
+    if (!friendly.empty()) {
+      name = friendly +
+             ((info.dwFlags & MONITORINFOF_PRIMARY) ? " (Primary)" : "");
+    }
+  }
+  flutter::EncodableMap entry;
+  entry[flutter::EncodableValue("sourceId")] =
+      flutter::EncodableValue(deviceId);
+  entry[flutter::EncodableValue("name")] = flutter::EncodableValue(name);
+  entry[flutter::EncodableValue("type")] = flutter::EncodableValue("screen");
+  out->push_back(flutter::EncodableValue(entry));
+  return TRUE;
+}
+
+// Enumerate top-level visible windows with non-empty titles.
+BOOL CALLBACK WindowEnumProc(HWND hwnd, LPARAM lParam) {
+  if (!IsWindowVisible(hwnd) || GetWindow(hwnd, GW_OWNER) != nullptr) {
+    return TRUE;
+  }
+  LONG style = GetWindowLongW(hwnd, GWL_STYLE);
+  LONG exStyle = GetWindowLongW(hwnd, GWL_EXSTYLE);
+  if ((style & WS_CHILD) || (exStyle & WS_EX_TOOLWINDOW)) {
+    return TRUE;
+  }
+  int len = GetWindowTextLengthW(hwnd);
+  if (len <= 0) return TRUE;
+  // +1 for null terminator; GetWindowTextW writes at most nMaxCount chars
+  // including the terminator.
+  std::wstring title(static_cast<size_t>(len) + 1, L'\0');
+  int copied = GetWindowTextW(hwnd, &title[0], len + 1);
+  title.resize(static_cast<size_t>(copied));
+  std::string titleUtf8 = WideToUtf8(title.c_str());
+  if (titleUtf8.empty()) return TRUE;
+
+  auto* out = reinterpret_cast<flutter::EncodableList*>(lParam);
+  uintptr_t handleInt = reinterpret_cast<uintptr_t>(hwnd);
+  flutter::EncodableMap entry;
+  entry[flutter::EncodableValue("sourceId")] =
+      flutter::EncodableValue(std::to_string(handleInt));
+  entry[flutter::EncodableValue("name")] =
+      flutter::EncodableValue(titleUtf8);
+  entry[flutter::EncodableValue("type")] = flutter::EncodableValue("window");
+  out->push_back(flutter::EncodableValue(entry));
+  return TRUE;
+}
+
+ZoomVideoSDKShareOption BuildShareOption(const flutter::EncodableMap* map) {
+  ZoomVideoSDKShareOption option;
+  option.isWithDeviceAudio = GetBool(map, "withDeviceAudio", false);
+  option.isOptimizeForSharedVideo =
+      GetBool(map, "optimizeForSharedVideo", false);
+  return option;
+}
+
+}  // namespace
+
 void ZoomVideoSdkFlutterPlugin::HandleShareStartScreen(
+    const flutter::EncodableMap* args,
     std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
   if (!sdk_) {
     result->Error("SHARE_ERROR", "SDK not initialized");
     return;
   }
-  // Windows: startShareScreen에 monitorID 전달 (nullptr = 기본 모니터)
-  ZoomVideoSDKShareOption option;
-  auto err = sdk_->getShareHelper()->startShareScreen(nullptr, option);
+  auto option = BuildShareOption(GetMap(args, "option"));
+  auto monitorIdUtf8 = GetString(args, "monitorId");
+  // nullptr lets the SDK pick the primary display — that path is known-good.
+  // Only pass an explicit monitor ID when the caller asked for a specific one.
+  std::wstring monitorIdWide =
+      monitorIdUtf8.empty() ? L"" : Utf8ToWide(monitorIdUtf8);
+  const wchar_t* monitorId =
+      monitorIdWide.empty() ? nullptr : monitorIdWide.c_str();
+
+  // Force GDI-based Legacy capture. Zoom SDK's default (Auto) tries DirectX
+  // paths that conflict with Flutter's ANGLE/D3D11 context and fail with
+  // Internal_Error (2). Set proactively so we don't need a retry that
+  // would trip Call_Too_Frequently (8) rate limiting.
+  auto* shareHelper = sdk_->getShareHelper();
+  auto err = shareHelper->startShareScreen(monitorId, option);
   if (err == ZoomVideoSDKErrors_Success) {
     result->Success();
   } else {
     result->Error("SHARE_ERROR",
-                  "startShareScreen failed: " + std::to_string(err));
+                  "startShareScreen failed: " + std::to_string(err) + " " +
+                      BuildShareDiagnostics(shareHelper));
   }
 }
+
+
 
 void ZoomVideoSdkFlutterPlugin::HandleShareStartView(
     const flutter::EncodableMap* args,
@@ -653,16 +876,33 @@ void ZoomVideoSdkFlutterPlugin::HandleShareStartView(
     return;
   }
 
-  // windowId를 HWND로 변환
-  HWND hwnd = reinterpret_cast<HWND>(
-      static_cast<uintptr_t>(std::stoull(windowIdStr)));
-  ZoomVideoSDKShareOption option;
-  auto err = sdk_->getShareHelper()->startShareView(hwnd, option);
+  HWND hwnd = nullptr;
+  try {
+    hwnd = reinterpret_cast<HWND>(
+        static_cast<uintptr_t>(std::stoull(windowIdStr)));
+  } catch (...) {
+    result->Error("INVALID_ARGS", "windowId must be a numeric HWND");
+    return;
+  }
+  auto option = BuildShareOption(GetMap(args, "option"));
+  auto* shareHelper = sdk_->getShareHelper();
+  if (!shareHelper) {
+    result->Error("SHARE_ERROR", "Share helper not available");
+    return;
+  }
+  if (!shareHelper->isShareViewValid(hwnd)) {
+    result->Error("INVALID_ARGS",
+                  "Window handle is not shareable (closed or not a top-level "
+                  "visible window)");
+    return;
+  }
+  auto err = shareHelper->startShareView(hwnd, option);
   if (err == ZoomVideoSDKErrors_Success) {
     result->Success();
   } else {
     result->Error("SHARE_ERROR",
-                  "startShareView failed: " + std::to_string(err));
+                  "startShareView failed: " + std::to_string(err) + " " +
+                      BuildShareDiagnostics(shareHelper));
   }
 }
 
@@ -670,11 +910,7 @@ void ZoomVideoSdkFlutterPlugin::HandleShareStop(
     std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
   auto err = sdk_ ? sdk_->getShareHelper()->stopShare()
                   : ZoomVideoSDKErrors_Uninitialize;
-  if (err == ZoomVideoSDKErrors_Success) {
-    result->Success();
-  } else {
-    result->Error("SHARE_ERROR", "stopShare failed: " + std::to_string(err));
-  }
+  FinishResult(std::move(result), err, "SHARE_ERROR", "stopShare");
 }
 
 void ZoomVideoSdkFlutterPlugin::HandleShareEnableDeviceAudio(
@@ -683,12 +919,51 @@ void ZoomVideoSdkFlutterPlugin::HandleShareEnableDeviceAudio(
   bool enable = GetBool(args, "enable", false);
   auto err = sdk_ ? sdk_->getShareHelper()->enableShareDeviceAudio(enable)
                   : ZoomVideoSDKErrors_Uninitialize;
-  if (err == ZoomVideoSDKErrors_Success) {
-    result->Success();
-  } else {
-    result->Error("SHARE_ERROR",
-                  "enableShareDeviceAudio failed: " + std::to_string(err));
+  FinishResult(std::move(result), err, "SHARE_ERROR",
+               "enableShareDeviceAudio");
+}
+
+void ZoomVideoSdkFlutterPlugin::HandleShareEnableOptimizeForVideo(
+    const flutter::EncodableMap* args,
+    std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
+  bool enable = GetBool(args, "enable", false);
+  auto err = sdk_ ? sdk_->getShareHelper()->enableOptimizeForSharedVideo(enable)
+                  : ZoomVideoSDKErrors_Uninitialize;
+  FinishResult(std::move(result), err, "SHARE_ERROR",
+               "enableOptimizeForSharedVideo");
+}
+
+namespace {
+struct WindowEnumCtx {
+  flutter::EncodableList* out;
+  HWND selfHwnd;
+};
+
+// Wrapper that skips the Flutter host window and its ancestors, then
+// delegates to WindowEnumProc.
+BOOL CALLBACK WindowEnumProcFiltered(HWND hwnd, LPARAM lParam) {
+  auto* ctx = reinterpret_cast<WindowEnumCtx*>(lParam);
+  if (ctx->selfHwnd) {
+    HWND walker = hwnd;
+    while (walker) {
+      if (walker == ctx->selfHwnd) return TRUE;
+      walker = GetParent(walker);
+    }
   }
+  return WindowEnumProc(hwnd, reinterpret_cast<LPARAM>(ctx->out));
+}
+}  // namespace
+
+void ZoomVideoSdkFlutterPlugin::HandleShareGetSourceList(
+    std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
+  flutter::EncodableList sources;
+  EnumDisplayMonitors(nullptr, nullptr, &MonitorEnumProc,
+                      reinterpret_cast<LPARAM>(&sources));
+  HWND selfTopLevel = flutter_hwnd_ ? GetAncestor(flutter_hwnd_, GA_ROOT)
+                                    : nullptr;
+  WindowEnumCtx ctx{&sources, selfTopLevel};
+  EnumWindows(&WindowEnumProcFiltered, reinterpret_cast<LPARAM>(&ctx));
+  result->Success(flutter::EncodableValue(sources));
 }
 
 // MARK: - Chat
@@ -704,12 +979,7 @@ void ZoomVideoSdkFlutterPlugin::HandleChatSendToAll(
   std::wstring wideMsg = Utf8ToWide(message);
   auto err = sdk_ ? sdk_->getChatHelper()->sendChatToAll(wideMsg.c_str())
                   : ZoomVideoSDKErrors_Uninitialize;
-  if (err == ZoomVideoSDKErrors_Success) {
-    result->Success();
-  } else {
-    result->Error("CHAT_ERROR",
-                  "sendChatToAll failed: " + std::to_string(err));
-  }
+  FinishResult(std::move(result), err, "CHAT_ERROR", "sendChatToAll");
 }
 
 void ZoomVideoSdkFlutterPlugin::HandleChatSendToUser(
@@ -724,12 +994,7 @@ void ZoomVideoSdkFlutterPlugin::HandleChatSendToUser(
   }
   std::wstring wideMsg = Utf8ToWide(message);
   auto err = sdk_->getChatHelper()->sendChatToUser(user, wideMsg.c_str());
-  if (err == ZoomVideoSDKErrors_Success) {
-    result->Success();
-  } else {
-    result->Error("CHAT_ERROR",
-                  "sendChatToUser failed: " + std::to_string(err));
-  }
+  FinishResult(std::move(result), err, "CHAT_ERROR", "sendChatToUser");
 }
 
 void ZoomVideoSdkFlutterPlugin::HandleChatIsDisabled(
@@ -759,24 +1024,16 @@ void ZoomVideoSdkFlutterPlugin::HandleRecordingStart(
     std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
   auto err = sdk_ ? sdk_->getRecordingHelper()->startCloudRecording()
                   : ZoomVideoSDKErrors_Uninitialize;
-  if (err == ZoomVideoSDKErrors_Success) {
-    result->Success();
-  } else {
-    result->Error("RECORDING_ERROR",
-                  "startCloudRecording failed: " + std::to_string(err));
-  }
+  FinishResult(std::move(result), err, "RECORDING_ERROR",
+               "startCloudRecording");
 }
 
 void ZoomVideoSdkFlutterPlugin::HandleRecordingStop(
     std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
   auto err = sdk_ ? sdk_->getRecordingHelper()->stopCloudRecording()
                   : ZoomVideoSDKErrors_Uninitialize;
-  if (err == ZoomVideoSDKErrors_Success) {
-    result->Success();
-  } else {
-    result->Error("RECORDING_ERROR",
-                  "stopCloudRecording failed: " + std::to_string(err));
-  }
+  FinishResult(std::move(result), err, "RECORDING_ERROR",
+               "stopCloudRecording");
 }
 
 // MARK: - Virtual Background
@@ -803,11 +1060,7 @@ void ZoomVideoSdkFlutterPlugin::HandleVBAddItem(
   IVirtualBackgroundItem* item = nullptr;
   auto err = sdk_->getVideoHelper()->addVirtualBackgroundItem(
       widePath.c_str(), &item);
-  if (err == ZoomVideoSDKErrors_Success) {
-    result->Success();
-  } else {
-    result->Error("VB_ERROR", "addItem failed: " + std::to_string(err));
-  }
+  FinishResult(std::move(result), err, "VB_ERROR", "addItem");
 }
 
 void ZoomVideoSdkFlutterPlugin::HandleVBGetItemList(
@@ -860,11 +1113,7 @@ void ZoomVideoSdkFlutterPlugin::HandleVBSetItem(
   }
 
   auto err = sdk_->getVideoHelper()->setVirtualBackgroundItem(target);
-  if (err == ZoomVideoSDKErrors_Success) {
-    result->Success();
-  } else {
-    result->Error("VB_ERROR", "setItem failed: " + std::to_string(err));
-  }
+  FinishResult(std::move(result), err, "VB_ERROR", "setItem");
 }
 
 void ZoomVideoSdkFlutterPlugin::HandleVBRemoveItem(
@@ -902,11 +1151,7 @@ void ZoomVideoSdkFlutterPlugin::HandleVBRemoveItem(
   }
 
   auto err = sdk_->getVideoHelper()->removeVirtualBackgroundItem(target);
-  if (err == ZoomVideoSDKErrors_Success) {
-    result->Success();
-  } else {
-    result->Error("VB_ERROR", "removeItem failed: " + std::to_string(err));
-  }
+  FinishResult(std::move(result), err, "VB_ERROR", "removeItem");
 }
 
 void ZoomVideoSdkFlutterPlugin::HandleVBGetSelectedItem(
@@ -929,89 +1174,63 @@ void ZoomVideoSdkFlutterPlugin::HandleVBGetSelectedItem(
 void ZoomVideoSdkFlutterPlugin::HandleUserMakeHost(
     const flutter::EncodableMap* args,
     std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
-  auto userId = GetString(args, "userId");
-  auto* user = FindUser(userId);
+  auto* user = FindUser(GetString(args, "userId"));
   if (!user) {
     result->Error("INVALID_ARGS", "User not found");
     return;
   }
-  bool success = sdk_->getUserHelper()->makeHost(user);
-  if (success) {
-    result->Success();
-  } else {
-    result->Error("USER_ERROR", "makeHost failed");
-  }
+  FinishResult(std::move(result), sdk_->getUserHelper()->makeHost(user),
+               "USER_ERROR", "makeHost");
 }
 
 void ZoomVideoSdkFlutterPlugin::HandleUserMakeManager(
     const flutter::EncodableMap* args,
     std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
-  auto userId = GetString(args, "userId");
-  auto* user = FindUser(userId);
+  auto* user = FindUser(GetString(args, "userId"));
   if (!user) {
     result->Error("INVALID_ARGS", "User not found");
     return;
   }
-  bool success = sdk_->getUserHelper()->makeManager(user);
-  if (success) {
-    result->Success();
-  } else {
-    result->Error("USER_ERROR", "makeManager failed");
-  }
+  FinishResult(std::move(result), sdk_->getUserHelper()->makeManager(user),
+               "USER_ERROR", "makeManager");
 }
 
 void ZoomVideoSdkFlutterPlugin::HandleUserRevokeManager(
     const flutter::EncodableMap* args,
     std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
-  auto userId = GetString(args, "userId");
-  auto* user = FindUser(userId);
+  auto* user = FindUser(GetString(args, "userId"));
   if (!user) {
     result->Error("INVALID_ARGS", "User not found");
     return;
   }
-  auto err = sdk_->getUserHelper()->revokeManager(user);
-  if (err == ZoomVideoSDKErrors_Success) {
-    result->Success();
-  } else {
-    result->Error("USER_ERROR",
-                  "revokeManager failed: " + std::to_string(err));
-  }
+  FinishResult(std::move(result), sdk_->getUserHelper()->revokeManager(user),
+               "USER_ERROR", "revokeManager");
 }
 
 void ZoomVideoSdkFlutterPlugin::HandleUserRemove(
     const flutter::EncodableMap* args,
     std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
-  auto userId = GetString(args, "userId");
-  auto* user = FindUser(userId);
+  auto* user = FindUser(GetString(args, "userId"));
   if (!user) {
     result->Error("INVALID_ARGS", "User not found");
     return;
   }
-  bool success = sdk_->getUserHelper()->removeUser(user);
-  if (success) {
-    result->Success();
-  } else {
-    result->Error("USER_ERROR", "removeUser failed");
-  }
+  FinishResult(std::move(result), sdk_->getUserHelper()->removeUser(user),
+               "USER_ERROR", "removeUser");
 }
 
 void ZoomVideoSdkFlutterPlugin::HandleUserChangeName(
     const flutter::EncodableMap* args,
     std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
   auto name = GetString(args, "name");
-  auto userId = GetString(args, "userId");
-  auto* user = FindUser(userId);
+  auto* user = FindUser(GetString(args, "userId"));
   if (!user || name.empty()) {
     result->Error("INVALID_ARGS", "name and userId required");
     return;
   }
   std::wstring wideName = Utf8ToWide(name);
   bool success = sdk_->getUserHelper()->changeName(wideName.c_str(), user);
-  if (success) {
-    result->Success();
-  } else {
-    result->Error("USER_ERROR", "changeName failed");
-  }
+  FinishResult(std::move(result), success, "USER_ERROR", "changeName");
 }
 
 }  // namespace zoom_video_sdk_flutter

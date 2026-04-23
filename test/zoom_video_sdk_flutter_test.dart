@@ -1,4 +1,5 @@
-import 'package:flutter/foundation.dart' show TargetPlatform, debugDefaultTargetPlatformOverride;
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, debugDefaultTargetPlatformOverride;
 import 'package:flutter/services.dart' show MethodCall, MethodChannel;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:zoom_video_sdk_flutter/zoom_video_sdk_flutter.dart';
@@ -7,6 +8,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   const methodChannel = MethodChannel('zoom_video_sdk_flutter');
+
   /// 기록된 MethodChannel 호출
   final List<MethodCall> calls = [];
 
@@ -21,9 +23,9 @@ void main() {
 
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(methodChannel, (MethodCall call) async {
-      calls.add(call);
-      return nextResult;
-    });
+          calls.add(call);
+          return nextResult;
+        });
   });
 
   tearDown(() {
@@ -75,11 +77,13 @@ void main() {
     tearDown(() => sdk.dispose());
 
     test('init sends correct method and args', () async {
-      await sdk.init(const ZoomInitConfig(
-        domain: 'zoom.us',
-        enableLog: false,
-        appGroupId: 'group.test',
-      ));
+      await sdk.init(
+        const ZoomInitConfig(
+          domain: 'zoom.us',
+          enableLog: false,
+          appGroupId: 'group.test',
+        ),
+      );
 
       expect(calls, hasLength(1));
       expect(calls.first.method, 'init');
@@ -94,21 +98,23 @@ void main() {
       await sdk.init(const ZoomInitConfig());
 
       expect(calls.first.arguments, {
-        'domain': 'zoom.us',
+        'domain': 'https://zoom.us',
         'enableLog': true,
       });
     });
 
     test('joinSession sends all fields', () async {
-      await sdk.joinSession(const ZoomJoinSessionConfig(
-        sessionName: 'test-session',
-        userName: 'Alice',
-        token: 'jwt-token',
-        sessionPassword: '1234',
-        audioOptions: ZoomAudioOptions(connect: false, mute: true),
-        videoOptions: ZoomVideoOptions(localVideoOn: true),
-        sessionIdleTimeoutMins: 30,
-      ));
+      await sdk.joinSession(
+        const ZoomJoinSessionConfig(
+          sessionName: 'test-session',
+          userName: 'Alice',
+          token: 'jwt-token',
+          sessionPassword: '1234',
+          audioOptions: ZoomAudioOptions(connect: false, mute: true),
+          videoOptions: ZoomVideoOptions(localVideoOn: true),
+          sessionIdleTimeoutMins: 30,
+        ),
+      );
 
       expect(calls.first.method, 'joinSession');
       final args = calls.first.arguments as Map;
@@ -116,17 +122,23 @@ void main() {
       expect(args['userName'], 'Alice');
       expect(args['token'], 'jwt-token');
       expect(args['sessionPassword'], '1234');
-      expect(args['audioOptions'], {'connect': false, 'mute': true});
+      expect(args['audioOptions'], {
+        'connect': false,
+        'mute': true,
+        'autoAdjustSpeakerVolume': true,
+      });
       expect(args['videoOptions'], {'localVideoOn': true});
       expect(args['sessionIdleTimeoutMins'], 30);
     });
 
     test('joinSession with minimal config omits optional fields', () async {
-      await sdk.joinSession(const ZoomJoinSessionConfig(
-        sessionName: 's',
-        userName: 'u',
-        token: 't',
-      ));
+      await sdk.joinSession(
+        const ZoomJoinSessionConfig(
+          sessionName: 's',
+          userName: 'u',
+          token: 't',
+        ),
+      );
 
       final args = calls.first.arguments as Map;
       expect(args.containsKey('sessionPassword'), isFalse);
@@ -182,10 +194,7 @@ void main() {
           'isTalking': true,
           'audioType': 'voip',
         },
-        'videoStatus': {
-          'isOn': true,
-          'hasSource': true,
-        },
+        'videoStatus': {'isOn': true, 'hasSource': true},
       };
 
       final user = await sdk.getMyself();
@@ -217,7 +226,12 @@ void main() {
 
     test('getRemoteUsers deserializes list', () async {
       nextResult = [
-        {'userId': 'r1', 'userName': 'Remote', 'isHost': false, 'isManager': false},
+        {
+          'userId': 'r1',
+          'userName': 'Remote',
+          'isHost': false,
+          'isManager': false,
+        },
       ];
 
       final users = await sdk.getRemoteUsers();
@@ -609,7 +623,7 @@ void main() {
   group('Config classes', () {
     test('ZoomInitConfig defaults', () {
       const config = ZoomInitConfig();
-      expect(config.domain, 'zoom.us');
+      expect(config.domain, 'https://zoom.us');
       expect(config.enableLog, isTrue);
       expect(config.appGroupId, isNull);
     });
@@ -648,9 +662,9 @@ void main() {
     });
 
     test('UserJoinedEvent holds users', () {
-      const event = UserJoinedEvent(users: [
-        ZoomUser(userId: 'u1', userName: 'A'),
-      ]);
+      const event = UserJoinedEvent(
+        users: [ZoomUser(userId: 'u1', userName: 'A')],
+      );
       expect(event.users, hasLength(1));
     });
 
@@ -732,17 +746,35 @@ void main() {
     test('desktop-only methods throw on Android', () {
       debugDefaultTargetPlatformOverride = TargetPlatform.android;
       expect(() => sdk.videoHelper.getCameraList(), throwsUnimplementedError);
-      expect(() => sdk.shareHelper.startShareView('1'), throwsUnimplementedError);
-      expect(() => sdk.shareHelper.enableShareDeviceAudio(true), throwsUnimplementedError);
-      expect(() => sdk.recordingHelper.canStartRecording(), throwsUnimplementedError);
+      expect(
+        () => sdk.shareHelper.startShareView('1'),
+        throwsUnimplementedError,
+      );
+      expect(
+        () => sdk.shareHelper.enableShareDeviceAudio(true),
+        throwsUnimplementedError,
+      );
+      expect(
+        () => sdk.recordingHelper.canStartRecording(),
+        throwsUnimplementedError,
+      );
     });
 
     test('desktop-only methods throw on iOS', () {
       debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
       expect(() => sdk.videoHelper.getCameraList(), throwsUnimplementedError);
-      expect(() => sdk.shareHelper.startShareView('1'), throwsUnimplementedError);
-      expect(() => sdk.shareHelper.enableShareDeviceAudio(true), throwsUnimplementedError);
-      expect(() => sdk.recordingHelper.canStartRecording(), throwsUnimplementedError);
+      expect(
+        () => sdk.shareHelper.startShareView('1'),
+        throwsUnimplementedError,
+      );
+      expect(
+        () => sdk.shareHelper.enableShareDeviceAudio(true),
+        throwsUnimplementedError,
+      );
+      expect(
+        () => sdk.recordingHelper.canStartRecording(),
+        throwsUnimplementedError,
+      );
     });
   });
 }

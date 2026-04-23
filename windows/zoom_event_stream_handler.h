@@ -21,6 +21,12 @@ class ZoomEventStreamHandler
   ZoomEventStreamHandler();
   virtual ~ZoomEventStreamHandler();
 
+  // Fired whenever a user join/leave or video/share status change arrives —
+  // lets the plugin retry pending texture subscriptions.
+  void SetUserStateListener(std::function<void()> listener) {
+    user_state_listener_ = std::move(listener);
+  }
+
  protected:
   // StreamHandler
   std::unique_ptr<flutter::StreamHandlerError<flutter::EncodableValue>>
@@ -35,6 +41,7 @@ class ZoomEventStreamHandler
  private:
   std::unique_ptr<flutter::EventSink<flutter::EncodableValue>> event_sink_;
   std::mutex sink_mutex_;
+  std::function<void()> user_state_listener_;
 
   void SendEvent(const std::string& type,
                  const flutter::EncodableMap& data = {});

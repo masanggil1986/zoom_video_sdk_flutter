@@ -1,6 +1,6 @@
 # Dart API Design — zoom_video_sdk_flutter
 
-> Generated: 2026-04-07
+> Last updated: 2026-04-23
 > Based on: [ZOOM_SDK_REFERENCE.md](./ZOOM_SDK_REFERENCE.md)
 > Target platforms: Android, iOS, Windows, macOS
 
@@ -159,16 +159,24 @@ const config = ZoomJoinSessionConfig(
 
 #### `ZoomAudioOptions`
 
-| Field | Type | Default |
-|-------|------|---------|
-| `connect` | `bool` | `true` |
-| `mute` | `bool` | `false` |
+| Field | Type | Default | Notes |
+|-------|------|---------|-------|
+| `connect` | `bool` | `true` | Auto-connect audio on join |
+| `mute` | `bool` | `false` | Start muted |
+| `autoAdjustSpeakerVolume` | `bool` | `true` | macOS/Windows only — auto-raise speaker volume if muted/low at join |
 
 #### `ZoomVideoOptions`
 
 | Field | Type | Default |
 |-------|------|---------|
 | `localVideoOn` | `bool` | `false` |
+
+#### `ZoomShareOption`
+
+| Field | Type | Default | Notes |
+|-------|------|---------|-------|
+| `withDeviceAudio` | `bool` | `false` | Include system audio in the share stream (desktop only) |
+| `optimizeForSharedVideo` | `bool` | `false` | Prefer frame rate over clarity — use when sharing video |
 
 ### Model Classes
 
@@ -250,6 +258,14 @@ Max message size: 10,000 bytes (all platforms).
 |-------|------|
 | `imageName` | `String` |
 | `imagePath` | `String` |
+
+#### `ZoomShareSource`
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `sourceId` | `String` | Opaque id — pass to `startShareScreen(monitorId:)` or `startShareView(windowId)` |
+| `name` | `String` | Monitor label or window title |
+| `type` | `ZoomShareSourceType` | `screen` or `window` |
 
 ### `ZoomEvent` (sealed class)
 
@@ -561,6 +577,55 @@ Returns the list of available cameras. Desktop only.
 
 **Throws:** `UnimplementedError` on Android/iOS.
 
+#### `videoHelper.selectCamera`
+
+```dart
+Future<void> selectCamera(String deviceId)
+```
+
+Selects a camera by device ID. On mobile, use `switchCamera()` to toggle front/back.
+
+| Android | iOS | Windows | macOS |
+|---------|-----|---------|-------|
+| ❌ | ❌ | ✅ | ✅ |
+
+**Throws:** `UnimplementedError` on Android/iOS.
+
+#### `videoHelper.setVideoQualityPreference`
+
+```dart
+Future<void> setVideoQualityPreference(
+  ZoomVideoPreferenceMode mode, {
+  int minimumFrameRate = 0,
+  int maximumFrameRate = 0,
+})
+```
+
+Sets the camera video quality preference. For `ZoomVideoPreferenceMode.custom`, supply
+`minimumFrameRate`/`maximumFrameRate` (valid range: 0–30, `min <= max`).
+
+| Android | iOS | Windows | macOS |
+|---------|-----|---------|-------|
+| ✅ | ✅ | ✅ | ✅ |
+
+### Video / Share View (`ZoomVideoView`)
+
+```dart
+ZoomVideoView({required String userId, ZoomVideoKind kind = ZoomVideoKind.video})
+```
+
+Widget that renders a user's camera feed or screen share. On macOS it wraps
+`AppKitView` (platform view); on Windows it's a Flutter `Texture` driven by a
+native raw-data subscription. Android/iOS currently show a black placeholder.
+
+| Android | iOS | Windows | macOS |
+|---------|-----|---------|-------|
+| ❌ | ❌ | ✅ | ✅ |
+
+> **Windows self-share note:** Subscribing to the local user's own share pipe
+> crashes the SDK on teardown, so `ZoomVideoView(kind: share)` shows a black
+> placeholder when `userId` is the local user. Remote shares render normally.
+
 ### Screen Share
 
 Screen share methods are on the `shareHelper` accessor.
@@ -568,11 +633,16 @@ Screen share methods are on the `shareHelper` accessor.
 #### `shareHelper.startShareScreen`
 
 ```dart
-Future<void> startShareScreen()
+Future<void> startShareScreen({
+  String? monitorId,
+  ZoomShareOption? option,
+})
 ```
 
-Starts screen sharing. On iOS, requires `appGroupId` in `ZoomInitConfig` and a
-Broadcast Upload Extension. On Android, requires MediaProjection permission.
+Starts screen sharing. On desktop, `monitorId` from `getShareSourceList()` picks a
+specific display; omit for the primary display. On iOS, requires `appGroupId` in
+`ZoomInitConfig` and a Broadcast Upload Extension. On Android, requires
+MediaProjection permission.
 
 | Android | iOS | Windows | macOS |
 |---------|-----|---------|-------|
@@ -581,10 +651,11 @@ Broadcast Upload Extension. On Android, requires MediaProjection permission.
 #### `shareHelper.startShareView`
 
 ```dart
-Future<void> startShareView(String windowId)
+Future<void> startShareView(String windowId, {ZoomShareOption? option})
 ```
 
-Shares a specific application window. Desktop only.
+Shares a specific application window by its handle (Windows: HWND as decimal string;
+macOS: CGWindowID). Desktop only.
 
 | Android | iOS | Windows | macOS |
 |---------|-----|---------|-------|
@@ -593,8 +664,24 @@ Shares a specific application window. Desktop only.
 **Throws:** `UnimplementedError` on Android/iOS.
 
 ```dart
-await sdk.shareHelper.startShareView('window-handle-123');
+final sources = await sdk.shareHelper.getShareSourceList();
+final window = sources.firstWhere((s) => s.type == ZoomShareSourceType.window);
+await sdk.shareHelper.startShareView(window.sourceId);
 ```
+
+#### `shareHelper.getShareSourceList`
+
+```dart
+Future<List<ZoomShareSource>> getShareSourceList()
+```
+
+Enumerates shareable monitors and top-level application windows. Desktop only.
+
+| Android | iOS | Windows | macOS |
+|---------|-----|---------|-------|
+| ❌ | ❌ | ✅ | ✅ |
+
+**Throws:** `UnimplementedError` on Android/iOS.
 
 #### `shareHelper.stopShare`
 
@@ -615,6 +702,21 @@ Future<void> enableShareDeviceAudio(bool enable)
 ```
 
 Enables or disables sharing device audio alongside screen share. Desktop only.
+
+| Android | iOS | Windows | macOS |
+|---------|-----|---------|-------|
+| ❌ | ❌ | ✅ | ✅ |
+
+**Throws:** `UnimplementedError` on Android/iOS.
+
+#### `shareHelper.enableOptimizeForSharedVideo`
+
+```dart
+Future<void> enableOptimizeForSharedVideo(bool enable)
+```
+
+Toggles "optimize for video" on an active share — prioritizes frame rate over
+still-frame clarity. A screen/window share must already be running. Desktop only.
 
 | Android | iOS | Windows | macOS |
 |---------|-----|---------|-------|
@@ -976,11 +1078,16 @@ pattern (`ZoomVideoSDKDelegate` / `IZoomVideoSDKDelegate` / `ZMVideoSDKDelegate`
 | `videoHelper.stopVideo()` | ✅ | ✅ | ✅ | ✅ |
 | `videoHelper.switchCamera()` | ✅ | ✅ | ✅ | ✅ |
 | `videoHelper.getCameraList()` | ❌ | ❌ | ✅ | ✅ |
+| `videoHelper.selectCamera(deviceId)` | ❌ | ❌ | ✅ | ✅ |
+| `videoHelper.setVideoQualityPreference(mode, ...)` | ✅ | ✅ | ✅ | ✅ |
+| `ZoomVideoView(userId, kind)` widget | ❌ | ❌ | ✅ | ✅ |
 | **Screen Share** | | | | |
-| `shareHelper.startShareScreen()` | ✅ | ✅ | ✅ | ✅ |
-| `shareHelper.startShareView(windowId)` | ❌ | ❌ | ✅ | ✅ |
+| `shareHelper.startShareScreen({monitorId, option})` | ✅ | ✅ | ✅ | ✅ |
+| `shareHelper.startShareView(windowId, {option})` | ❌ | ❌ | ✅ | ✅ |
+| `shareHelper.getShareSourceList()` | ❌ | ❌ | ✅ | ✅ |
 | `shareHelper.stopShare()` | ✅ | ✅ | ✅ | ✅ |
 | `shareHelper.enableShareDeviceAudio(bool)` | ❌ | ❌ | ✅ | ✅ |
+| `shareHelper.enableOptimizeForSharedVideo(bool)` | ❌ | ❌ | ✅ | ✅ |
 | **Chat** | | | | |
 | `chatHelper.sendChatToAll(msg)` | ✅ | ✅ | ✅ | ✅ |
 | `chatHelper.sendChatToUser(userId, msg)` | ✅ | ✅ | ✅ | ✅ |
@@ -1038,12 +1145,14 @@ pattern (`ZoomVideoSDKDelegate` / `IZoomVideoSDKDelegate` / `ZMVideoSDKDelegate`
 Methods that are **structurally unsupported** on certain platforms perform a runtime
 platform check and throw `UnimplementedError` before reaching native code.
 
-| Method | Throws on | Error message |
-|--------|-----------|---------------|
-| `videoHelper.getCameraList()` | Android, iOS | `'getCameraList() is not supported on Android/iOS. See docs/DART_API_DESIGN.md for platform support details.'` |
-| `shareHelper.startShareView()` | Android, iOS | `'startShareView() is not supported on Android/iOS. See docs/DART_API_DESIGN.md for platform support details.'` |
-| `shareHelper.enableShareDeviceAudio()` | Android, iOS | `'enableShareDeviceAudio() is not supported on Android/iOS. See docs/DART_API_DESIGN.md for platform support details.'` |
-| `recordingHelper.canStartRecording()` | Android, iOS | `'canStartRecording() is not supported on Android/iOS. See docs/DART_API_DESIGN.md for platform support details.'` |
+| Method | Throws on |
+|--------|-----------|
+| `videoHelper.getCameraList()` | Android, iOS |
+| `videoHelper.selectCamera(deviceId)` | Android, iOS |
+| `shareHelper.startShareView(windowId)` | Android, iOS |
+| `shareHelper.getShareSourceList()` | Android, iOS |
+| `shareHelper.enableShareDeviceAudio(enable)` | Android, iOS |
+| `shareHelper.enableOptimizeForSharedVideo(enable)` | Android, iOS |
+| `recordingHelper.canStartRecording()` | Android, iOS |
 
-All other public methods throw `UnimplementedError('Not yet implemented')` as a
-temporary stub until native platform channels are wired up.
+Each throws `UnimplementedError('<method>() is not supported on <platform>. See docs/DART_API_DESIGN.md for platform support details.')`.

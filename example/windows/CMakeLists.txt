@@ -52,8 +52,10 @@ add_subdirectory(${FLUTTER_MANAGED_DIR})
 # Application build; see runner/CMakeLists.txt.
 add_subdirectory("runner")
 
-# Enable the test target.
-set(include_zoom_video_sdk_flutter_tests TRUE)
+# Plugin unit tests are not built with the example app — they depend on
+# Zoom SDK DLLs that aren't staged next to the test binary, which breaks
+# gtest_discover_tests. Run them standalone via the plugin's CMakeLists
+# with `-Dinclude_zoom_video_sdk_flutter_tests=TRUE` when needed.
 
 # Generated plugin build rules, which manage building the plugins and adding
 # them to the application.
