@@ -106,13 +106,17 @@ final class ZoomVideoRenderView: NSView {
         let sdk = ZMVideoSDK.shared()
         guard let session = sdk.getSessionInfo() else { return }
 
-        let user: ZMVideoSDKUser? = {
-            if let myself = session.getMySelf(),
-               (myself.getID() ?? "") == userId {
-                return myself
-            }
-            return session.getRemoteUsers()?.first { ($0.getID() ?? "") == userId }
-        }()
+        let myself = session.getMySelf()
+        let isMyself = (myself?.getID() ?? "") == userId
+
+        // 자신이 공유 중인 화면은 렌더링하지 않음 (Windows와 동작 일치).
+        // Windows에서는 로컬 share pipe subscribe 시 SDK 종료 크래시가 발생해 skip 하고,
+        // macOS에서는 안전하긴 하지만 UX 관점에서 동일하게 본인 share 타일은 검은 배경 유지.
+        if kind == .share, isMyself { return }
+
+        let user: ZMVideoSDKUser? = isMyself
+            ? myself
+            : session.getRemoteUsers()?.first { ($0.getID() ?? "") == userId }
         guard let user else { return }
 
         let canvas: NSObject? = switch kind {

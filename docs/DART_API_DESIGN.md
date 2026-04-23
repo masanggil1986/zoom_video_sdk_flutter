@@ -622,9 +622,11 @@ native raw-data subscription. Android/iOS currently show a black placeholder.
 |---------|-----|---------|-------|
 | ❌ | ❌ | ✅ | ✅ |
 
-> **Windows self-share note:** Subscribing to the local user's own share pipe
-> crashes the SDK on teardown, so `ZoomVideoView(kind: share)` shows a black
-> placeholder when `userId` is the local user. Remote shares render normally.
+> **Desktop self-share note:** `ZoomVideoView(kind: share)` shows a black
+> placeholder when `userId` is the local user on Windows and macOS. On Windows
+> this is required because subscribing to the local user's own share pipe
+> crashes the SDK on teardown; macOS follows the same behavior for UX
+> consistency. Remote shares render normally.
 
 ### Screen Share
 

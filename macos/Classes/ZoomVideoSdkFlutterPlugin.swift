@@ -1,3 +1,4 @@
+import AVFoundation
 import Cocoa
 import FlutterMacOS
 import ZMVideoSDK
@@ -163,6 +164,9 @@ private extension ZoomVideoSdkFlutterPlugin {
         if let handler = eventStreamHandler {
             sdk?.addListener(handler)
         }
+        // TCC 마이크 권한 프롬프트를 사전에 트리거. startAudio 시점에 macOS가
+        // 권한 거부를 조용히 처리하여 무음 송출되는 문제 방지.
+        AVCaptureDevice.requestAccess(for: .audio) { _ in }
         result(nil)
     }
 
@@ -252,6 +256,16 @@ private extension ZoomVideoSdkFlutterPlugin {
 private extension ZoomVideoSdkFlutterPlugin {
 
     func handleAudioStartAudio(result: @escaping FlutterResult) {
+        // TCC 권한이 거부/제한 상태면 SDK는 성공 반환해도 실제 마이크 데이터는
+        // 전송되지 않음. 조용한 실패 대신 명확한 오류를 돌려준다.
+        let status = AVCaptureDevice.authorizationStatus(for: .audio)
+        if status == .denied || status == .restricted {
+            result(flutterError(
+                "MIC_PERMISSION_DENIED",
+                "Microphone permission denied. Enable it in System Settings → Privacy & Security → Microphone."
+            ))
+            return
+        }
         reply(sdk?.getAudioHelper().startAudio(), result, "AUDIO_ERROR", "startAudio")
     }
 

@@ -26,5 +26,6 @@ Initial pre-release.
 - Native Zoom Video SDK binaries are not redistributed — see the `Native SDK
   Setup` section in `README.md` for per-platform download and placement.
 - iOS screen sharing requires `appGroupId` and a Broadcast Upload Extension.
-- Windows share capture is forced to `Filtering` mode and self-share pipe
-  subscription is skipped to avoid SDK teardown crashes.
+- Windows share capture is forced to `Filtering` mode. Self-share rendering is
+  skipped on both Windows and macOS — Windows to avoid an SDK teardown crash,
+  macOS for UX consistency.
