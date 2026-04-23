@@ -34,10 +34,12 @@ migrate_working_dir/
 /build/
 /coverage/
 
-# Zoom Video SDK binaries (macOS)
-# Download manually from https://developers.zoom.us/docs/video-sdk/
+# Zoom Video SDK binaries — download manually from https://developers.zoom.us/docs/video-sdk/
 macos/Frameworks/*
 !macos/Frameworks/.gitkeep
+windows/zoom_sdk/*
+!windows/zoom_sdk/.gitkeep
 
 # Claude Code internal instructions
 CLAUDE.md
+.claude/
