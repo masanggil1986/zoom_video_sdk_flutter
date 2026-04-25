@@ -192,6 +192,7 @@ class ZoomUser {
     this.isManager = false,
     this.audioStatus,
     this.videoStatus,
+    this.isSharing = false,
   });
 
   /// Unique identifier within the session.
@@ -211,6 +212,14 @@ class ZoomUser {
 
   /// Current video status, or `null` if video has not started.
   final ZoomVideoStatus? videoStatus;
+
+  /// Whether this user currently has an active screen share.
+  ///
+  /// Populated by `getAllUsers` / `getRemoteUsers` so late joiners can
+  /// detect an in-progress share they would otherwise miss (the SDK only
+  /// fires `userShareStatusChanged` on transitions). Currently only
+  /// reported on Windows; defaults to `false` elsewhere.
+  final bool isSharing;
 }
 
 /// Audio status of a [ZoomUser].
@@ -1470,6 +1479,7 @@ ZoomUser _decodeUser(Map<String, dynamic> map) {
             Map<String, dynamic>.from(map['videoStatus'] as Map),
           )
         : null,
+    isSharing: map['isSharing'] as bool? ?? false,
   );
 }
 

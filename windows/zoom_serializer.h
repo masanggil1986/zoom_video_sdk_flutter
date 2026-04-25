@@ -100,6 +100,14 @@ inline flutter::EncodableMap SerializeUser(IZoomVideoSDKUser* user) {
             flutter::EncodableValue(videoMap);
     }
 
+    // Share status — true iff the user has at least one active share action.
+    // Lets late joiners detect an in-progress share that fired its
+    // userShareStatusChanged event before they joined.
+    auto* shareList = user->getShareActionList();
+    bool isSharing = shareList && shareList->GetCount() > 0;
+    map[flutter::EncodableValue("isSharing")] =
+        flutter::EncodableValue(isSharing);
+
     return map;
 }
 

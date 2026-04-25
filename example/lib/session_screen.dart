@@ -128,6 +128,16 @@ class _SessionScreenState extends State<SessionScreen> {
     final users = await _runQuery('getAllUsers', widget.sdk.getAllUsers);
     if (!mounted || users == null) return;
     final myId = _myself?.userId;
+    // Detect a share already in progress at the moment we joined — the SDK
+    // doesn't replay userShareStatusChanged for late joiners, so we have
+    // to discover it from the user list.
+    String? sharingNow;
+    for (final u in users) {
+      if (u.isSharing) {
+        sharingNow = u.userId;
+        break;
+      }
+    }
     setState(() {
       _users = users;
       if (myId != null) {
@@ -138,6 +148,7 @@ class _SessionScreenState extends State<SessionScreen> {
           }
         }
       }
+      _sharingUserId ??= sharingNow;
     });
   }
 
@@ -244,9 +255,7 @@ class _SessionScreenState extends State<SessionScreen> {
               child: sharingUserValid
                   ? _ShareLayout(
                       sharingUser: sharingUser,
-                      otherUsers: _users
-                          .where((u) => u.userId != sharingUser.userId)
-                          .toList(),
+                      otherUsers: _users,
                       myselfId: _myself?.userId,
                       onUserTap: _showUserActions,
                     )
@@ -572,6 +581,8 @@ class _ShareLayout extends StatelessWidget {
   });
 
   final ZoomUser sharingUser;
+  // All session participants — includes the sharing user so their camera
+  // tile remains visible in the strip alongside the big share view.
   final List<ZoomUser> otherUsers;
   final String? myselfId;
   final void Function(ZoomUser) onUserTap;

@@ -72,12 +72,23 @@ IZoomVideoSDKUser* FindUser(IZoomVideoSDK* sdk, const std::string& userId) {
   return nullptr;
 }
 
-// True iff the user currently has a live share action — i.e. the share
-// pipe we may have cached is still safe to call unSubscribe on.
+// True iff the user has a share action whose pipe is still live — i.e.
+// safe to call unSubscribe on. Critically, we must check the action's
+// status, not just its presence in the list: when onUserShareStatusChanged
+// fires for Stop, the action is still in the list (with status=Stop) but
+// its pipe is being torn down. Treating that as "active" causes us to
+// skip the in-callback unSubscribe, leaving the SDK with a dangling
+// delegate that crashes on later teardown.
 bool UserHasActiveShare(IZoomVideoSDKUser* user) {
   if (!user) return false;
   auto* list = user->getShareActionList();
-  return list && list->GetCount() > 0 && list->GetItem(0) != nullptr;
+  if (!list || list->GetCount() == 0) return false;
+  auto* action = list->GetItem(0);
+  if (!action) return false;
+  auto status = action->getShareStatus();
+  return status == ZoomVideoSDKShareStatus_Start ||
+         status == ZoomVideoSDKShareStatus_Resume ||
+         status == ZoomVideoSDKShareStatus_Pause;
 }
 
 }  // namespace
@@ -135,15 +146,33 @@ bool ZoomVideoTextureRenderer::TrySubscribe(IZoomVideoSDK* sdk) {
   }
   if (!pipe) return false;
 
-  auto err = pipe->subscribe(ZoomVideoSDKResolution_720P, this);
-  if (err == ZoomVideoSDKErrors_Success) {
-    subscribedPipe_ = pipe;
-    return true;
+  // Walk down resolutions until subscribe succeeds. Zoom's raw-data
+  // subscriber budget is roughly: 1×1080p OR 2×720p OR many×360p, plus
+  // ≤2 share streams. With 4+ video tiles in a grid, a uniform 720p
+  // subscribe leaves the 3rd/4th tile black with a HasSubscribeTwo720P /
+  // HasSubscribeExceededLimit failure. 360p is plenty for tile-sized
+  // rendering and lifts the per-session cap, while still letting the
+  // first one or two tiles try 720p first for sharpness.
+  static constexpr ZoomVideoSDKResolution kFallback[] = {
+      ZoomVideoSDKResolution_720P,
+      ZoomVideoSDKResolution_360P,
+      ZoomVideoSDKResolution_180P,
+  };
+  for (auto res : kFallback) {
+    auto err = pipe->subscribe(res, this);
+    if (err == ZoomVideoSDKErrors_Success) {
+      subscribedPipe_ = pipe;
+      return true;
+    }
   }
   return false;
 }
 
-void ZoomVideoTextureRenderer::ForgetPipe() { subscribedPipe_ = nullptr; }
+void ZoomVideoTextureRenderer::Unsubscribe() {
+  if (!subscribedPipe_) return;
+  subscribedPipe_->unSubscribe(this);
+  subscribedPipe_ = nullptr;
+}
 
 void ZoomVideoTextureRenderer::Dispose(IZoomVideoSDK* sdk) {
   if (disposed_) return;
@@ -151,7 +180,9 @@ void ZoomVideoTextureRenderer::Dispose(IZoomVideoSDK* sdk) {
 
   // Only call unSubscribe when we can verify the pipe is still live in the
   // SDK. For share, the pipe is destroyed when the share action ends; for
-  // video, the pipe lives as long as the user is in the session.
+  // video, the pipe lives as long as the user is in the session. If the
+  // share already ended, OnSessionStateChanged should have unsubscribed
+  // synchronously while the pipe was still live.
   if (subscribedPipe_) {
     bool pipeStillLive = true;
     if (kind_ == Kind::Share) {
@@ -230,16 +261,35 @@ const FlutterDesktopPixelBuffer* ZoomVideoTextureRenderer::CopyBuffer(
 
 // MARK: - ZoomVideoTextureManager
 
+ZoomVideoTextureManager::ZoomVideoTextureManager(
+    flutter::TextureRegistrar* registrar)
+    : registrar_(registrar) {
+  retry_thread_ = std::thread(&ZoomVideoTextureManager::RetryLoop, this);
+}
+
+ZoomVideoTextureManager::~ZoomVideoTextureManager() {
+  {
+    std::lock_guard<std::mutex> lk(retry_mutex_);
+    retry_stop_ = true;
+  }
+  retry_cv_.notify_all();
+  if (retry_thread_.joinable()) retry_thread_.join();
+}
+
 int64_t ZoomVideoTextureManager::Create(IZoomVideoSDK* sdk,
                                          const std::string& userId,
                                          ZoomVideoTextureRenderer::Kind kind) {
   auto renderer =
       std::make_unique<ZoomVideoTextureRenderer>(registrar_, userId, kind);
   int64_t id = renderer->Register();
-  renderer->TrySubscribe(sdk);
+  bool subscribed = renderer->TrySubscribe(sdk);
 
-  std::lock_guard<std::mutex> lk(mutex_);
-  renderers_.emplace(id, std::move(renderer));
+  {
+    std::lock_guard<std::mutex> lk(mutex_);
+    sdk_for_retry_ = sdk;
+    renderers_.emplace(id, std::move(renderer));
+  }
+  if (!subscribed) NotifyUnsubscribed();
   return id;
 }
 
@@ -255,17 +305,85 @@ void ZoomVideoTextureManager::Dispose(IZoomVideoSDK* sdk, int64_t textureId) {
   renderer->Dispose(sdk);
 }
 
-void ZoomVideoTextureManager::OnSessionStateChanged(IZoomVideoSDK* sdk) {
-  // Invoked from the Zoom SDK event thread. Do NOT call back into the SDK
-  // here (e.g. pipe->subscribe) — reentrancy from inside a status-changed
-  // callback has crashed the SDK on Windows. We only drop cached share
-  // pipe pointers that the SDK is about to destroy.
-  std::lock_guard<std::mutex> lk(mutex_);
-  for (auto& [_, renderer] : renderers_) {
-    if (renderer->kind() != ZoomVideoTextureRenderer::Kind::Share) continue;
-    auto* user = FindUser(sdk, renderer->user_id());
-    if (!UserHasActiveShare(user)) renderer->ForgetPipe();
+void ZoomVideoTextureManager::NotifyUnsubscribed() {
+  retry_cv_.notify_all();
+}
+
+void ZoomVideoTextureManager::RetryLoop() {
+  using namespace std::chrono;
+  std::unique_lock<std::mutex> wait_lk(retry_mutex_);
+  while (!retry_stop_) {
+    // Idle until either someone notifies us (a renderer was just created
+    // unsubscribed) or the retry interval elapses while there's work to do.
+    retry_cv_.wait_for(wait_lk, milliseconds(retry_interval_ms_),
+                       [this] { return retry_stop_.load(); });
+    if (retry_stop_) break;
+
+    IZoomVideoSDK* sdk = nullptr;
+    bool any_unsubscribed = false;
+    {
+      std::lock_guard<std::mutex> lk(mutex_);
+      sdk = sdk_for_retry_;
+      if (sdk) {
+        for (auto& [_, renderer] : renderers_) {
+          if (renderer->IsSubscribed()) continue;
+          // Skip share renderers whose user has no active share — those
+          // remain unsubscribed by design (e.g. self-share, or share
+          // ended) and should not be polled forever.
+          if (renderer->kind() == ZoomVideoTextureRenderer::Kind::Share) {
+            auto* user = FindUser(sdk, renderer->user_id());
+            if (!UserHasActiveShare(user)) continue;
+          }
+          renderer->TrySubscribe(sdk);
+          if (!renderer->IsSubscribed()) any_unsubscribed = true;
+        }
+      }
+    }
+    // If everything is subscribed, fall back to a long sleep until the
+    // next Create-or-event nudge wakes us.
+    if (!any_unsubscribed) {
+      retry_cv_.wait(wait_lk, [this] {
+        if (retry_stop_) return true;
+        std::lock_guard<std::mutex> lk(mutex_);
+        for (auto& [_, renderer] : renderers_) {
+          if (!renderer->IsSubscribed()) return true;
+        }
+        return false;
+      });
+    }
   }
+}
+
+void ZoomVideoTextureManager::OnSessionStateChanged(IZoomVideoSDK* sdk) {
+  // Invoked from the Zoom SDK event thread. We must release the SDK's
+  // delegate reference *before* the pipe is torn down (share end) — doing
+  // so after teardown leaves the SDK with a dangling delegate pointer and
+  // crashes when it later tries to call us. The status-changed callback
+  // is the last point at which the pipe is guaranteed live.
+  //
+  // We also retry subscriptions here for renderers that couldn't attach
+  // when the view was first created — e.g. a user who hadn't started
+  // their video yet, or who joined after our widget mounted.
+  if (!sdk) return;
+  bool any_unsubscribed = false;
+  {
+    std::lock_guard<std::mutex> lk(mutex_);
+    sdk_for_retry_ = sdk;
+    for (auto& [_, renderer] : renderers_) {
+      if (renderer->kind() == ZoomVideoTextureRenderer::Kind::Share) {
+        auto* user = FindUser(sdk, renderer->user_id());
+        if (!UserHasActiveShare(user)) {
+          renderer->Unsubscribe();
+          continue;
+        }
+      }
+      if (!renderer->IsSubscribed()) {
+        renderer->TrySubscribe(sdk);
+        if (!renderer->IsSubscribed()) any_unsubscribed = true;
+      }
+    }
+  }
+  if (any_unsubscribed) NotifyUnsubscribed();
 }
 
 void ZoomVideoTextureManager::DisposeAll(IZoomVideoSDK* sdk) {
