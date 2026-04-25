@@ -19,6 +19,15 @@ public class ZoomVideoSdkFlutterPlugin: NSObject, FlutterPlugin {
             binaryMessenger: registrar.messenger
         )
         instance.eventStreamHandler = ZoomEventStreamHandler()
+        // 사용자 상태(join/video/share) 변경 시 ZoomVideoRenderView가
+        // 늦게 들어온 user/canvas에 대해 subscribe를 재시도할 수 있도록 알림 전파.
+        // 다중 사용자 환경에서 일부 타일이 검은 화면으로 남는 문제 방지.
+        instance.eventStreamHandler?.onUserStateChanged = {
+            NotificationCenter.default.post(
+                name: ZoomVideoRenderView.userStateChangedNotification,
+                object: nil
+            )
+        }
         eventChannel.setStreamHandler(instance.eventStreamHandler)
 
         let viewFactory = ZoomVideoPlatformViewFactory(messenger: registrar.messenger)
