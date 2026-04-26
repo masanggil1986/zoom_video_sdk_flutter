@@ -38,6 +38,41 @@ class ZoomEventStreamHandler: NSObject, FlutterStreamHandler {
             self?.onUserStateChanged?()
         }
     }
+
+    /// 주어진 사용자 목록 중 현재 share가 Start/Resume 상태인 사용자에 대해
+    /// `userShareStatusChanged` 이벤트를 발화한다.
+    /// Zoom SDK는 이미 진행 중인 공유에 대해 late-joiner에게 해당 콜백을
+    /// 재발화하지 않으므로 직접 보정한다.
+    ///
+    /// 구현 주의: `ZMVideoSDKShareAction` 클래스 심볼은 SDK 바이너리에서
+    /// export되지 않아 Swift 코드에서 직접 타입 참조하면 링커 에러가 발생한다.
+    /// (ZoomVideoPlatformView의 resolveShareCanvas와 동일한 패턴으로 회피.)
+    /// → `NSObject`로 다루고 KVC로 shareStatus를 읽는다.
+    fileprivate func emitActiveShareStatus(for users: [ZMVideoSDKUser]?) {
+        guard let users else { return }
+        let listSel = NSSelectorFromString("getShareActionList")
+        let startStatus = UInt(ZMVideoSDKShareStatus_Start.rawValue)
+        let resumeStatus = UInt(ZMVideoSDKShareStatus_Resume.rawValue)
+        for user in users {
+            guard user.responds(to: listSel),
+                  let raw = user.perform(listSel)?.takeUnretainedValue() as? NSArray else {
+                continue
+            }
+            let hasActive = raw.contains { obj in
+                guard let action = obj as? NSObject,
+                      let n = action.value(forKey: "shareStatus") as? NSNumber else {
+                    return false
+                }
+                let s = n.uintValue
+                return s == startStatus || s == resumeStatus
+            }
+            guard hasActive else { continue }
+            sendEvent(type: "userShareStatusChanged", data: [
+                "user": ZoomSerializer.serializeUser(user),
+                "status": ZoomSerializer.serializeShareStatus(ZMVideoSDKShareStatus_Start),
+            ])
+        }
+    }
 }
 
 // MARK: - ZMVideoSDKDelegate
@@ -47,6 +82,10 @@ extension ZoomEventStreamHandler: ZMVideoSDKDelegate {
     func onSessionJoin() {
         sendEvent(type: "sessionJoined")
         notifyUserStateChanged()
+        // late-joiner 대응: 이미 진행 중이던 공유는 `onUserShareStatusChanged`가
+        // 발화하지 않으므로 현재 세션의 remote 사용자 중 active share를 가진
+        // 사용자에 대해 synthetic 이벤트를 발화한다.
+        emitActiveShareStatus(for: ZMVideoSDK.shared().getSessionInfo()?.getRemoteUsers())
     }
 
     func onSessionLeave(_ reason: ZMVideoSDKSessionLeaveReason) {
@@ -65,6 +104,9 @@ extension ZoomEventStreamHandler: ZMVideoSDKDelegate {
             "users": ZoomSerializer.serializeUserList(userArray),
         ])
         notifyUserStateChanged()
+        // `onSessionJoin` 시점에 share action이 아직 hydrate 되지 않았을 수 있으므로
+        // user join 시점에도 한 번 더 체크. Flutter 측에서 "started" 이벤트는 멱등하다.
+        emitActiveShareStatus(for: userArray)
     }
 
     func onUserLeave(_ helper: ZMVideoSDKUserHelper, userList userArray: [ZMVideoSDKUser]?) {
