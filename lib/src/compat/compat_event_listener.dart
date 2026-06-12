@@ -20,12 +20,18 @@ class EventType {
 }
 
 class ZoomVideoSdkEventListener {
+  /// 모바일 공식 리스너는 생성 시마다 EventChannel 핸들러를 재등록해 마지막
+  /// 인스턴스만 이벤트를 받는다(last-wins). 모든 addListener 가 하나의 공식
+  /// 인스턴스를 공유해 멀티플렉싱되도록 단일 인스턴스를 유지한다.
+  static final mobile.ZoomVideoSdkEventListener _mobileListener =
+      mobile.ZoomVideoSdkEventListener();
+
   StreamSubscription<dynamic> addListener(
     String event,
     void Function(dynamic data) handler,
   ) {
     if (!isZoomDesktop) {
-      return mobile.ZoomVideoSdkEventListener().addListener(event, handler);
+      return _mobileListener.addListener(event, handler);
     }
     return zoomDesktopSdk.events
         .map(_toMobileShape)
@@ -70,6 +76,8 @@ class ZoomVideoSdkEventListener {
       ),
       plugin.CommandReceivedEvent(:final senderId, :final command) => (
         EventType.onCommandReceived,
+        // latent key drift: 공식 모바일 payload 는 발신자를 'sender' 키로 주지만
+        // 여기선 'senderId' 로 emit 한다. 앱은 'command' 만 읽어 현재는 무해.
         {'command': command, 'senderId': senderId},
       ),
       plugin.ErrorEvent(:final errorCode, :final message) => (

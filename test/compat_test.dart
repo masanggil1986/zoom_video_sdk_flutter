@@ -190,6 +190,42 @@ void main() {
     await sub.cancel();
   });
 
+  test('모바일 경로: 두 이벤트에 등록한 두 리스너가 모두 이벤트를 받는다', () async {
+    // last-wins 회귀 방지: 모바일 공식 리스너는 생성 시마다 EventChannel 을
+    // 재등록하므로, addListener 마다 새 인스턴스를 만들면 마지막 구독만 살아남는다.
+    // 공식 패키지의 이벤트 채널('eventListener')을 mock 해 두 리스너가 서로 다른
+    // 이벤트를 각각 수신하는지 검증한다(구 코드는 첫 리스너가 0건 → 실패).
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    const officialEventChannel = EventChannel('eventListener');
+    MockStreamHandlerEventSink? sink;
+    messenger.setMockStreamHandler(
+      officialEventChannel,
+      MockStreamHandler.inline(onListen: (args, s) => sink = s),
+    );
+    try {
+      final sessionJoin = Completer<dynamic>();
+      final userJoin = Completer<dynamic>();
+      final sub1 = ZoomVideoSdkEventListener().addListener(
+        EventType.onSessionJoin,
+        sessionJoin.complete,
+      );
+      final sub2 = ZoomVideoSdkEventListener().addListener(
+        EventType.onUserJoin,
+        userJoin.complete,
+      );
+      // 공식 패키지 payload 모양: {'name': eventType, 'message': data}
+      sink!.success({'name': EventType.onSessionJoin, 'message': {}});
+      sink!.success({'name': EventType.onUserJoin, 'message': {}});
+      await sessionJoin.future.timeout(const Duration(seconds: 1));
+      await userJoin.future.timeout(const Duration(seconds: 1));
+      await sub1.cancel();
+      await sub2.cancel();
+    } finally {
+      messenger.setMockStreamHandler(officialEventChannel, null);
+      debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+    }
+  });
+
   test('VB: getVirtualBackgroundItemList 가 모바일 type 문자열로 매핑', () async {
     onCall = (call) => call.method == 'virtualBackground.getItemList'
         ? [
