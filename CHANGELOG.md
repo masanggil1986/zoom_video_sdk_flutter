@@ -1,3 +1,45 @@
+## 0.1.0
+
+**Command channel**
+- `cmdHelper.sendCommand(String command, {String? receiverUserId})` — sends a
+  session-scoped command message to a specific user; omit `receiverUserId` (or pass
+  `null`) to broadcast to all participants.
+- `onCommandReceived` event stream fires when a command arrives (`CommandReceivedEvent`
+  carries `senderId` and `command`).
+- Desktop only (`UnimplementedError` on Android/iOS per section 6).
+- Compat note: the compat facade mirrors the official-package positional order —
+  `cmdChannel.sendCommand(String receiverId, String strCmd)` — and delegates to the
+  core API above on macOS/Windows.
+
+**Cleanup**
+- `cleanup()` — tears down the native SDK cleanly after `leaveSession`. Desktop only.
+
+**Richer serialization**
+- `ZoomUser` now carries `customUserId` (server-assigned opaque id).
+- `ZoomChatMessage` now carries `messageId`.
+- `ZoomVirtualBackgroundItem` now carries a `type` field (`image`/`blur`/`none`).
+- `virtualBackgroundHelper.addItem()` now returns `ZoomVirtualBackgroundItem?`
+  (the newly created item including its auto-assigned `imageName`, or `null` if the
+  native layer does not return a matching item after the add).
+
+**macOS camera TCC pre-trigger**
+- No new Dart API. `init` now requests both camera and microphone TCC access during
+  initialisation (`AVCaptureDevice.requestAccess(for: .video/.audio)` in `handleInit`),
+  so both permission dialogs appear at startup rather than mid-session on the first
+  `startVideo()` / `startAudio()` call.
+
+**Windows parity**
+- Windows-side method-channel handlers wired for all new features
+  (build-verify pending; functionality mirrors macOS implementation).
+
+**Compat library**
+- New `package:zoom_video_sdk_flutter/compat.dart` — a
+  `flutter_zoom_videosdk`-compatible facade. tuit apps import a single path and
+  dispatch to the official mobile package on Android/iOS and to this plugin's
+  method channel on macOS/Windows. See section 7 of `docs/DART_API_DESIGN.md`.
+
+---
+
 ## 0.0.1
 
 Initial pre-release.

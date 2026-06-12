@@ -74,6 +74,10 @@ inline flutter::EncodableMap SerializeUser(IZoomVideoSDKUser* user) {
         flutter::EncodableValue(user->isHost());
     map[flutter::EncodableValue("isManager")] =
         flutter::EncodableValue(user->isManager());
+    // getUserKey(): 미설정 시 빈 문자열 반환. deprecated getCustomIdentity()와 동일 값.
+    // TODO(windows-verify): getUserKey() 미존재 시 getCustomIdentity()로 대체.
+    map[flutter::EncodableValue("customUserId")] =
+        flutter::EncodableValue(WideToUtf8(user->getUserKey()));
 
     // Audio status
     auto audioStatus = user->getAudioStatus();
@@ -157,6 +161,9 @@ inline flutter::EncodableMap SerializeChatMessage(IZoomVideoSDKChatMessage* msg)
         flutter::EncodableValue(msg->isSelfSend());
     map[flutter::EncodableValue("timestamp")] =
         flutter::EncodableValue(static_cast<int64_t>(msg->getTimeStamp()));
+    // 미설정 시 빈 문자열. WideToUtf8이 null도 ""로 흡수.
+    map[flutter::EncodableValue("messageId")] =
+        flutter::EncodableValue(WideToUtf8(msg->getMessageID()));
 
     auto* sender = msg->getSendUser();
     if (sender) {
@@ -206,12 +213,25 @@ inline flutter::EncodableMap SerializeCameraDevice(IZoomVideoSDKCameraDevice* de
     return map;
 }
 
+inline std::string SerializeVBType(ZoomVideoSDKVirtualBackgroundDataType type) {
+    if (type == ZoomVideoSDKVirtualBackgroundDataType_None) return "none";
+    if (type == ZoomVideoSDKVirtualBackgroundDataType_Blur) return "blur";
+    // _Image 및 그 외 모든 값은 "image"로 폴백 (Dart 기본값과 일치).
+    return "image";
+}
+
 inline flutter::EncodableMap SerializeVirtualBackgroundItem(IVirtualBackgroundItem* item) {
     flutter::EncodableMap map;
     map[flutter::EncodableValue("imageName")] =
         flutter::EncodableValue(WideToUtf8(item->getImageName()));
     map[flutter::EncodableValue("imagePath")] =
         flutter::EncodableValue(WideToUtf8(item->getImageFilePath()));
+    // TODO(windows-verify): IVirtualBackgroundItem의 타입 게터 이름을 SDK 헤더에서
+    // 반드시 확인한다. 이 게터는 LOAD-BEARING: 이름이 틀리면 컴파일 에러가
+    // addItem(addVirtualBackgroundItem)과 getItemList(getVirtualBackgroundItemList)
+    // 두 경로의 VB 직렬화 전체를 한꺼번에 막는다 — 다른 TODO들보다 영향 범위가 크다.
+    map[flutter::EncodableValue("type")] =
+        flutter::EncodableValue(SerializeVBType(item->getType()));
     return map;
 }
 

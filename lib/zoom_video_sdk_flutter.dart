@@ -193,6 +193,7 @@ class ZoomUser {
     this.audioStatus,
     this.videoStatus,
     this.isSharing = false,
+    this.customUserId,
   });
 
   /// Unique identifier within the session.
@@ -220,6 +221,9 @@ class ZoomUser {
   /// fires `userShareStatusChanged` on transitions). Currently only
   /// reported on Windows; defaults to `false` elsewhere.
   final bool isSharing;
+
+  /// Server-issued custom identifier from the JWT `user_key` field (formerly `user_identity`).
+  final String? customUserId;
 }
 
 /// Audio status of a [ZoomUser].
@@ -268,6 +272,7 @@ class ZoomSessionInfo {
 @immutable
 class ZoomChatMessage {
   const ZoomChatMessage({
+    required this.messageId,
     required this.content,
     required this.senderUser,
     this.receiverUser,
@@ -275,6 +280,9 @@ class ZoomChatMessage {
     required this.isSelfSend,
     required this.timestamp,
   });
+
+  /// Unique message identifier within the session — used for deduplication on the receiver side.
+  final String messageId;
 
   /// Message content. Max 10,000 bytes.
   final String content;
@@ -357,10 +365,14 @@ class ZoomVirtualBackgroundItem {
   const ZoomVirtualBackgroundItem({
     required this.imageName,
     required this.imagePath,
+    required this.type,
   });
 
   final String imageName;
   final String imagePath;
+
+  /// 'none' | 'blur' | 'image'
+  final String type;
 }
 
 // ---------------------------------------------------------------------------
@@ -608,6 +620,15 @@ final class ErrorEvent extends ZoomEvent {
   const ErrorEvent({required this.errorCode, this.message});
   final ZoomErrorCode errorCode;
   final String? message;
+}
+
+/// Fired when a command-channel message arrives.
+///
+/// **Platform support:** Android ❌ iOS ❌ Windows ✅ macOS ✅
+final class CommandReceivedEvent extends ZoomEvent {
+  const CommandReceivedEvent({required this.senderId, required this.command});
+  final String senderId;
+  final String command;
 }
 
 // ---------------------------------------------------------------------------
@@ -1001,13 +1022,20 @@ class ZoomVirtualBackgroundHelper {
     return result ?? false;
   }
 
-  /// Adds a virtual background image from a file path.
+  /// Adds a virtual background image and returns the created item.
   ///
   /// **Platform support:** Android ✅ iOS ✅ Windows ✅ macOS ✅
-  Future<void> addItem(String filePath) async {
-    await _channel.invokeMethod<void>('virtualBackground.addItem', {
-      'filePath': filePath,
-    });
+  Future<ZoomVirtualBackgroundItem?> addItem(String filePath) async {
+    final result = await _channel.invokeMapMethod<String, dynamic>(
+      'virtualBackground.addItem',
+      {'filePath': filePath},
+    );
+    if (result == null) return null;
+    return ZoomVirtualBackgroundItem(
+      imageName: result['imageName'] as String? ?? '',
+      imagePath: result['imagePath'] as String? ?? '',
+      type: result['type'] as String? ?? 'image',
+    );
   }
 
   /// Returns all available virtual background items.
@@ -1022,6 +1050,7 @@ class ZoomVirtualBackgroundHelper {
       return ZoomVirtualBackgroundItem(
         imageName: map['imageName'] as String,
         imagePath: map['imagePath'] as String,
+        type: map['type'] as String? ?? 'image',
       );
     }).toList();
   }
@@ -1055,7 +1084,31 @@ class ZoomVirtualBackgroundHelper {
     return ZoomVirtualBackgroundItem(
       imageName: result['imageName'] as String,
       imagePath: result['imagePath'] as String,
+      type: result['type'] as String? ?? 'image',
     );
+  }
+}
+
+/// Command channel — sends a custom string command to other users in a session.
+///
+/// Access via [ZoomVideoSdk.cmdHelper].
+class ZoomCmdHelper {
+  ZoomCmdHelper(this._channel);
+
+  final MethodChannel _channel;
+
+  /// Sends a custom string command to a specific user or broadcasts to all session
+  /// participants when [receiverUserId] is null.
+  ///
+  /// **Platform support:** Android ❌ iOS ❌ Windows ✅ macOS ✅
+  ///
+  /// Throws [UnimplementedError] on Android and iOS.
+  Future<void> sendCommand(String command, {String? receiverUserId}) async {
+    _assertDesktopOnly('sendCommand()');
+    await _channel.invokeMethod<void>('cmd.sendCommand', {
+      'command': command,
+      'receiverUserId': ?receiverUserId,
+    });
   }
 }
 
@@ -1143,6 +1196,7 @@ class ZoomVideoSdk {
     _recordingHelper = ZoomRecordingHelper(_channel);
     _virtualBackgroundHelper = ZoomVirtualBackgroundHelper(_channel);
     _userHelper = ZoomUserHelper(_channel);
+    _cmdHelper = ZoomCmdHelper(_channel);
 
     _eventSubscription = _eventChannel.receiveBroadcastStream().listen((
       dynamic event,
@@ -1168,6 +1222,7 @@ class ZoomVideoSdk {
   late final ZoomRecordingHelper _recordingHelper;
   late final ZoomVirtualBackgroundHelper _virtualBackgroundHelper;
   late final ZoomUserHelper _userHelper;
+  late final ZoomCmdHelper _cmdHelper;
 
   // ---- Helpers ----
 
@@ -1192,6 +1247,9 @@ class ZoomVideoSdk {
 
   /// Host / user management controls (make host, remove user, etc.).
   ZoomUserHelper get userHelper => _userHelper;
+
+  /// Command channel controls (send custom commands to other users).
+  ZoomCmdHelper get cmdHelper => _cmdHelper;
 
   // ---- Initialization ----
 
@@ -1370,11 +1428,30 @@ class ZoomVideoSdk {
   Stream<ErrorEvent> get onError =>
       events.where((e) => e is ErrorEvent).cast<ErrorEvent>();
 
+  /// Fires when a command-channel message arrives.
+  Stream<CommandReceivedEvent> get onCommandReceived => events
+      .where((e) => e is CommandReceivedEvent)
+      .cast<CommandReceivedEvent>();
+
   // ---- Cleanup ----
+
+  /// Fully tears down the native SDK, allowing re-initialisation via [init].
+  ///
+  /// See also [dispose], which only releases Dart-side streams.
+  ///
+  /// **Platform support:** Android ❌ iOS ❌ Windows ✅ macOS ✅
+  ///
+  /// Throws [UnimplementedError] on Android and iOS.
+  Future<void> cleanup() async {
+    _assertDesktopOnly('cleanup()');
+    await _channel.invokeMethod<void>('cleanup');
+  }
 
   /// Releases SDK resources and closes all event stream controllers.
   ///
   /// Must be called when the SDK is no longer needed.
+  ///
+  /// See also [cleanup], which releases the native SDK and allows re-init.
   ///
   /// **Platform support:** Android ✅ iOS ✅ Windows ✅ macOS ✅
   void dispose() {
@@ -1453,6 +1530,10 @@ ZoomEvent? _decodeEvent(Map<String, dynamic> map) {
       ),
       message: data['message'] as String?,
     ),
+    'commandReceived' => CommandReceivedEvent(
+      senderId: data['senderId'] as String? ?? '',
+      command: data['command'] as String? ?? '',
+    ),
     _ => null,
   };
 }
@@ -1480,6 +1561,7 @@ ZoomUser _decodeUser(Map<String, dynamic> map) {
           )
         : null,
     isSharing: map['isSharing'] as bool? ?? false,
+    customUserId: map['customUserId'] as String?,
   );
 }
 
@@ -1514,6 +1596,7 @@ ZoomSessionInfo _decodeSessionInfo(Map<String, dynamic> map) {
 
 ZoomChatMessage _decodeChatMessage(Map<String, dynamic> map) {
   return ZoomChatMessage(
+    messageId: map['messageId'] as String? ?? '',
     content: map['content'] as String,
     senderUser: _decodeUser(
       Map<String, dynamic>.from(map['senderUser'] as Map),

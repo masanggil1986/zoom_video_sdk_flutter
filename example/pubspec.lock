@@ -75,6 +75,14 @@ packages:
     description: flutter
     source: sdk
     version: "0.0.0"
+  flutter_hooks:
+    dependency: transitive
+    description:
+      name: flutter_hooks
+      sha256: cde36b12f7188c85286fba9b38cc5a902e7279f36dd676967106c041dc9dde70
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.20.5"
   flutter_lints:
     dependency: "direct dev"
     description:
@@ -88,6 +96,14 @@ packages:
     description: flutter
     source: sdk
     version: "0.0.0"
+  flutter_zoom_videosdk:
+    dependency: transitive
+    description:
+      name: flutter_zoom_videosdk
+      sha256: "5fde0fb4d2dae8464fcaa7183c021e8ff4e9fc3630aa2f0bc60c42d14f410fc2"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.5.0"
   fuchsia_remote_debug_protocol:
     dependency: transitive
     description: flutter
@@ -277,7 +293,7 @@ packages:
       path: ".."
       relative: true
     source: path
-    version: "0.0.1"
+    version: "0.1.0"
 sdks:
   dart: ">=3.11.1 <4.0.0"
   flutter: ">=3.18.0-18.0.pre.54"

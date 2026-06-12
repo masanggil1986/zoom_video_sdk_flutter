@@ -21,7 +21,7 @@ throw UnimplementedError(
 ```
 
 The check uses `defaultTargetPlatform` so it works in tests and on device. A private
-helper `_assertPlatformSupported()` centralises this logic.
+helper `_assertDesktopOnly()` centralises this logic.
 
 Features that are **partially supported** (e.g. audio device selection on iOS) are
 still callable — the doc comment notes the limitation and callers decide how to handle
@@ -1156,5 +1156,51 @@ platform check and throw `UnimplementedError` before reaching native code.
 | `shareHelper.enableShareDeviceAudio(enable)` | Android, iOS |
 | `shareHelper.enableOptimizeForSharedVideo(enable)` | Android, iOS |
 | `recordingHelper.canStartRecording()` | Android, iOS |
+| `cmdHelper.sendCommand()` | Android, iOS |
+| `cleanup()` | Android, iOS |
 
 Each throws `UnimplementedError('<method>() is not supported on <platform>. See docs/DART_API_DESIGN.md for platform support details.')`.
+
+---
+
+## 7. Compat Library (`package:zoom_video_sdk_flutter/compat.dart`)
+
+### Purpose
+
+tuit apps (`tuit_user`, `tuit_tutor`) run on both mobile and desktop. The official
+`flutter_zoom_videosdk` package covers Android/iOS; this plugin covers macOS/Windows.
+The compat library exposes a **single import path** with the same class names, method
+signatures, and result strings as `flutter_zoom_videosdk` 2.5, so apps need no
+platform branches in their own code.
+
+### Import
+
+```dart
+import 'package:zoom_video_sdk_flutter/compat.dart';
+```
+
+Do **not** import `package:zoom_video_sdk_flutter/zoom_video_sdk_flutter.dart`
+alongside the compat library — the two APIs are intentionally separate.
+
+### Runtime dispatch
+
+| Platform | Dispatches to |
+|----------|---------------|
+| Android, iOS | `flutter_zoom_videosdk` (official mobile package, direct passthrough) |
+| macOS, Windows | This plugin's method channel (`ZoomVideoSdk`) |
+
+### Contract guarantees
+
+The compat surface preserves the following `flutter_zoom_videosdk` contracts:
+
+| Contract | Value |
+|----------|-------|
+| Successful `initSdk()` result string | `'SDK initialized successfully'` |
+| Wrong-usage error string | `'ZoomVideoSDKError_Wrong_Usage'` |
+| Successful `joinSession()` callback string | `'join session success'` |
+| Class names | `ZoomVideoSdkCompat`, `ZoomVideoSdkEventListener`, `ZoomVideoView`, `VideoAspect`, `SessionContext`, `ZoomVideoSdkUser`, `ZoomVideoSdkAudioStatus`, `ZoomVideoSdkVideoStatus` |
+
+### Surface (YAGNI)
+
+Only the subset used by tuit apps is implemented. Methods not listed here are not
+present in the compat facade and should be added only when an app genuinely requires them.

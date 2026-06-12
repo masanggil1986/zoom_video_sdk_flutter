@@ -31,6 +31,8 @@ String formatEvent(ZoomEvent e) {
       message == null
           ? 'Error: ${errorCode.name}'
           : 'Error: ${errorCode.name} — $message',
+    CommandReceivedEvent(:final senderId, :final command) =>
+      'Command from $senderId: $command',
   };
 }
 

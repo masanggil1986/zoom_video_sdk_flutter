@@ -1,6 +1,6 @@
 name: zoom_video_sdk_flutter
 description: "A new Flutter plugin project."
-version: 0.0.1
+version: 0.1.0
 homepage:
 
 environment:
@@ -10,6 +10,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_zoom_videosdk: ^2.5.0
   plugin_platform_interface: ^2.0.2
 
 dev_dependencies:
