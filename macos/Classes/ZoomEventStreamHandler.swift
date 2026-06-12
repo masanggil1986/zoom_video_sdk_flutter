@@ -175,6 +175,14 @@ extension ZoomEventStreamHandler: ZMVideoSDKDelegate {
         ])
     }
 
+    /// 커맨드 채널 수신. tuit 칭찬/제어 등 세션 내 커스텀 메시지 fan-in.
+    func onCommandReceived(_ commandContent: String?, senderUser user: ZMVideoSDKUser?) {
+        sendEvent(type: "commandReceived", data: [
+            "command": commandContent ?? "",
+            "senderId": user?.getID() ?? "",
+        ])
+    }
+
     func onSessionNeedPassword(_ handle: ZMVideoSDKPasswordHandler) {
         sendEvent(type: "sessionNeedPassword")
     }

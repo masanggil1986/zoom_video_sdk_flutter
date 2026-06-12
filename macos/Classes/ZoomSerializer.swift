@@ -12,6 +12,9 @@ enum ZoomSerializer {
             "userName": user.getName() ?? "",
             "isHost": user.isHost(),
             "isManager": user.isManager(),
+            // getUserKey(): deprecated getCustomIdentity와 동일 값, 미설정 시 '' 반환.
+            // Swift ObjC 임포터가 get 접두사를 떼어 getKey()로 노출.
+            "customUserId": user.getKey() ?? "",
         ]
 
         if let audio = user.getAudioStatus() {
@@ -61,6 +64,8 @@ enum ZoomSerializer {
             "isChatToAll": msg.isChatToAll,
             "isSelfSend": msg.isSelfSend,
             "timestamp": Int64(msg.timeStamp),
+            // messageID는 NS_ASSUME_NONNULL 범위라 항상 String (빈 값이면 '')
+            "messageId": msg.messageID,
         ]
         let sender = msg.sendUser
         if let senderId = sender.getID(), !senderId.isEmpty {

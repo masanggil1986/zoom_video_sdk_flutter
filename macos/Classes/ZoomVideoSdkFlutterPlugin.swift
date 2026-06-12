@@ -42,12 +42,16 @@ public class ZoomVideoSdkFlutterPlugin: NSObject, FlutterPlugin {
         switch call.method {
         // SDK 라이프사이클
         case "init":                              handleInit(args: args, result: result)
+        case "cleanup":                           handleCleanup(result: result)
         case "joinSession":                       handleJoinSession(args: args, result: result)
         case "leaveSession":                      handleLeaveSession(args: args, result: result)
         case "getSessionInfo":                    handleGetSessionInfo(result: result)
         case "getMyself":                         handleGetMyself(result: result)
         case "getAllUsers":                       handleGetAllUsers(result: result)
         case "getRemoteUsers":                    handleGetRemoteUsers(result: result)
+
+        // Command Channel
+        case "cmd.sendCommand":                   handleSendCommand(args: args, result: result)
 
         // Audio
         case "audio.startAudio":                  handleAudioStartAudio(result: result)
@@ -176,6 +180,42 @@ private extension ZoomVideoSdkFlutterPlugin {
         // TCC 마이크 권한 프롬프트를 사전에 트리거. startAudio 시점에 macOS가
         // 권한 거부를 조용히 처리하여 무음 송출되는 문제 방지.
         AVCaptureDevice.requestAccess(for: .audio) { _ in }
+        // 카메라 TCC도 동일하게 사전 요청 (startVideo 시점 조용한 실패 방지).
+        AVCaptureDevice.requestAccess(for: .video) { _ in }
+        result(nil)
+    }
+
+    /// SDK 자원 해제. cleanUp 후 재초기화(init) 가능. 세션 중에는 호출 금지(헤더 주의).
+    func handleCleanup(result: @escaping FlutterResult) {
+        sdk?.cleanUp()
+        result(nil)
+    }
+
+    func handleSendCommand(args: [String: Any]?, result: @escaping FlutterResult) {
+        guard let command = args?["command"] as? String else {
+            result(flutterError("INVALID_ARGS", "command required"))
+            return
+        }
+        guard let cmdChannel = sdk?.getCmdChannel() else {
+            result(flutterError("NO_SESSION", "command channel unavailable"))
+            return
+        }
+        var receiver: ZMVideoSDKUser?
+        if let receiverId = args?["receiverUserId"] as? String {
+            guard let found = findUser(byId: receiverId) else {
+                result(flutterError("USER_NOT_FOUND", "receiver not in session"))
+                return
+            }
+            receiver = found
+        }
+        // 헤더: - (ZMVideoSDKErrors)sendCommand:receiveUser: , receiver nil이면 전체 broadcast.
+        // Swift ObjC 임포터가 receiveUser: 라벨을 receive: 로 축약.
+        let sdkResult = cmdChannel.sendCommand(command, receive: receiver)
+        guard sdkResult == ZMVideoSDKErrors_Success else {
+            result(flutterError("SEND_COMMAND_FAILED",
+                                "sendCommand failed: \(sdkResult.rawValue)"))
+            return
+        }
         result(nil)
     }
 
@@ -563,7 +603,14 @@ private extension ZoomVideoSdkFlutterPlugin {
             return
         }
         helper.perform(VBSelector.addItem, with: filePath, with: nil)
-        result(nil)
+        // 네이티브 add는 동기 반환값이 불안정(KVC 경유) — 목록에서 방금 추가된
+        // 항목(imageName == 파일명, 또는 imagePath == 입력 경로)을 찾아 돌려준다.
+        let fileName = (filePath as NSString).lastPathComponent
+        let added = vbItems().map(serializeVBItem).first {
+            ($0["imageName"] as? String) == fileName
+                || ($0["imagePath"] as? String) == filePath
+        }
+        result(added)
     }
 
     func handleVBGetItemList(result: @escaping FlutterResult) {
@@ -632,10 +679,19 @@ private extension ZoomVideoSdkFlutterPlugin {
     }
 
     private func serializeVBItem(_ obj: NSObject) -> [String: Any] {
-        [
+        var map: [String: Any] = [
             "imageName": obj.value(forKey: "imageName") as? String ?? "",
             "imagePath": obj.value(forKey: "imageFilePath") as? String ?? "",
         ]
+        // ZMVideoSDKVirtualBackgroundDataType raw: 0=None, 1=Image, 2=Blur (헤더 ZMVideoSDKDef.h 확인).
+        // enum 반환을 perform()으로 받으면 불안정하므로 KVC로 읽는다.
+        var typeName = "image"
+        if let raw = (obj.value(forKey: "type") as? NSNumber)?.intValue {
+            let names = ["none", "image", "blur"]
+            typeName = (0..<names.count).contains(raw) ? names[raw] : "image"
+        }
+        map["type"] = typeName
+        return map
     }
 }
 
