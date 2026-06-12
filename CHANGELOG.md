@@ -1,10 +1,15 @@
 ## 0.1.0
 
 **Command channel**
-- `cmdHelper.sendCommand(String receiverId, String content)` — sends a session-scoped
-  command message to a specific user or broadcast (`receiverId: ''`).
-- `commandReceived` event stream fires when a command arrives.
+- `cmdHelper.sendCommand(String command, {String? receiverUserId})` — sends a
+  session-scoped command message to a specific user; omit `receiverUserId` (or pass
+  `null`) to broadcast to all participants.
+- `onCommandReceived` event stream fires when a command arrives (`CommandReceivedEvent`
+  carries `senderId` and `command`).
 - Desktop only (`UnimplementedError` on Android/iOS per section 6).
+- Compat note: the compat facade mirrors the official-package positional order —
+  `cmdChannel.sendCommand(String receiverId, String strCmd)` — and delegates to the
+  core API above on macOS/Windows.
 
 **Cleanup**
 - `cleanup()` — tears down the native SDK cleanly after `leaveSession`. Desktop only.
@@ -13,12 +18,15 @@
 - `ZoomUser` now carries `customUserId` (server-assigned opaque id).
 - `ZoomChatMessage` now carries `messageId`.
 - `ZoomVirtualBackgroundItem` now carries a `type` field (`image`/`blur`/`none`).
-- `virtualBackgroundHelper.addItem()` now returns `ZoomVirtualBackgroundItem`
-  (the newly created item, including its auto-assigned `imageName`).
+- `virtualBackgroundHelper.addItem()` now returns `ZoomVirtualBackgroundItem?`
+  (the newly created item including its auto-assigned `imageName`, or `null` if the
+  native layer does not return a matching item after the add).
 
 **macOS camera TCC pre-trigger**
-- `videoHelper.triggerCameraPermission()` — fires the macOS TCC camera-access dialog
-  before the first `startVideo()`, avoiding a late-permission popup mid-session.
+- No new Dart API. `init` now requests both camera and microphone TCC access during
+  initialisation (`AVCaptureDevice.requestAccess(for: .video/.audio)` in `handleInit`),
+  so both permission dialogs appear at startup rather than mid-session on the first
+  `startVideo()` / `startAudio()` call.
 
 **Windows parity**
 - Windows-side method-channel handlers wired for all new features
