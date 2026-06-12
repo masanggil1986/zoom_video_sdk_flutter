@@ -168,6 +168,17 @@ void ZoomEventStreamHandler::onSessionPasswordWrong(
   SendEvent("sessionPasswordWrong");
 }
 
+// 커맨드 채널 수신. tuit 칭찬/제어 등 세션 내 커스텀 메시지 fan-in.
+void ZoomEventStreamHandler::onCommandReceived(IZoomVideoSDKUser* sender,
+                                               const zchar_t* strCmd) {
+  flutter::EncodableMap data;
+  data[flutter::EncodableValue("command")] =
+      flutter::EncodableValue(WideToUtf8(strCmd));
+  data[flutter::EncodableValue("senderId")] =
+      flutter::EncodableValue(sender ? WideToUtf8(sender->getUserID()) : "");
+  SendEvent("commandReceived", data);
+}
+
 // ---- 아래는 Flutter에 직접 전달하지 않는 콜백 (빈 구현) ----
 
 void ZoomEventStreamHandler::onShareContentChanged(
@@ -194,8 +205,6 @@ void ZoomEventStreamHandler::onRemoteControlRequestReceived(
     IZoomVideoSDKUser*, IZoomVideoSDKShareAction*,
     IZoomVideoSDKRemoteControlRequestHandler*) {}
 void ZoomEventStreamHandler::onRemoteControlServiceInstallResult(bool) {}
-void ZoomEventStreamHandler::onCommandReceived(IZoomVideoSDKUser*,
-                                               const zchar_t*) {}
 void ZoomEventStreamHandler::onCommandChannelConnectResult(bool) {}
 void ZoomEventStreamHandler::onInviteByPhoneStatus(PhoneStatus,
                                                    PhoneFailedReason) {}

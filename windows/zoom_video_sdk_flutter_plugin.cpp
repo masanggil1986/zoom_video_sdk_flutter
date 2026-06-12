@@ -21,6 +21,10 @@
 #include "helpers/zoom_video_sdk_recording_helper_interface.h"
 #include "helpers/zoom_video_sdk_user_helper_interface.h"
 #include "helpers/zoom_video_sdk_share_setting_interface.h"
+// TODO(windows-verify): cmd 채널 헤더 경로/이름 확인. helpers/ 하위일 수도 있음
+// (helpers/zoom_video_sdk_cmd_channel_interface.h). session/chat 인터페이스처럼
+// 최상위에 있을 가능성이 높아 우선 top-level 경로로 둠.
+#include "zoom_video_sdk_cmd_channel_interface.h"
 
 namespace zoom_video_sdk_flutter {
 
@@ -155,6 +159,8 @@ void ZoomVideoSdkFlutterPlugin::HandleMethodCall(
   // SDK 라이프사이클
   if (method == "init") {
     HandleInit(args, std::move(result));
+  } else if (method == "cleanup") {
+    HandleCleanup(std::move(result));
   } else if (method == "joinSession") {
     HandleJoinSession(args, std::move(result));
   } else if (method == "leaveSession") {
@@ -167,6 +173,10 @@ void ZoomVideoSdkFlutterPlugin::HandleMethodCall(
     HandleGetAllUsers(std::move(result));
   } else if (method == "getRemoteUsers") {
     HandleGetRemoteUsers(std::move(result));
+  }
+  // Command Channel
+  else if (method == "cmd.sendCommand") {
+    HandleSendCommand(args, std::move(result));
   }
   // Audio
   else if (method == "audio.startAudio") {
@@ -341,6 +351,14 @@ void ZoomVideoSdkFlutterPlugin::HandleInit(
   }
 }
 
+// SDK 자원 해제. cleanup 후 재초기화(init) 가능. 세션 중에는 호출 금지.
+// cleanup()은 소멸자(~ZoomVideoSdkFlutterPlugin)에서도 호출하므로 시그니처 검증됨.
+void ZoomVideoSdkFlutterPlugin::HandleCleanup(
+    std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
+  if (sdk_) sdk_->cleanup();
+  result->Success();
+}
+
 void ZoomVideoSdkFlutterPlugin::HandleJoinSession(
     const flutter::EncodableMap* args,
     std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
@@ -460,6 +478,45 @@ void ZoomVideoSdkFlutterPlugin::HandleGetRemoteUsers(
   }
   auto* remoteUsers = sdk_->getSessionInfo()->getRemoteUsers();
   result->Success(flutter::EncodableValue(SerializeUserList(remoteUsers)));
+}
+
+// MARK: - Command Channel
+
+void ZoomVideoSdkFlutterPlugin::HandleSendCommand(
+    const flutter::EncodableMap* args,
+    std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
+  auto command = GetString(args, "command");
+  if (command.empty()) {
+    result->Error("INVALID_ARGS", "command required");
+    return;
+  }
+  // TODO(windows-verify): IZoomVideoSDK::getCmdChannel() 이름 확인.
+  auto* cmdChannel = sdk_ ? sdk_->getCmdChannel() : nullptr;
+  if (!cmdChannel) {
+    result->Error("NO_SESSION", "command channel unavailable");
+    return;
+  }
+
+  // receiverUserId가 비어 있으면 nullptr → 전체 broadcast.
+  IZoomVideoSDKUser* receiver = nullptr;
+  auto receiverUserId = GetString(args, "receiverUserId");
+  if (!receiverUserId.empty()) {
+    receiver = FindUser(receiverUserId);
+    if (!receiver) {
+      result->Error("USER_NOT_FOUND", "receiver not in session");
+      return;
+    }
+  }
+
+  std::wstring wideCmd = Utf8ToWide(command);
+  // TODO(windows-verify): sendCommand(receiver, strCmd) 인자 순서 확인.
+  auto err = cmdChannel->sendCommand(receiver, wideCmd.c_str());
+  if (err != ZoomVideoSDKErrors_Success) {
+    result->Error("SEND_COMMAND_FAILED",
+                  "sendCommand failed: " + std::to_string(err));
+    return;
+  }
+  result->Success();
 }
 
 // MARK: - Audio
@@ -1060,7 +1117,32 @@ void ZoomVideoSdkFlutterPlugin::HandleVBAddItem(
   IVirtualBackgroundItem* item = nullptr;
   auto err = sdk_->getVideoHelper()->addVirtualBackgroundItem(
       widePath.c_str(), &item);
-  FinishResult(std::move(result), err, "VB_ERROR", "addItem");
+  if (err != ZoomVideoSDKErrors_Success) {
+    result->Error("VB_ERROR", "addItem failed: " + std::to_string(err));
+    return;
+  }
+
+  // 동기 out-param 반환값이 불안정할 수 있어, 목록에서 방금 추가된 항목
+  // (imageName == 파일명, 또는 imagePath == 입력 경로)을 찾아 돌려준다.
+  std::string fileName = filePath;
+  auto slash = filePath.find_last_of("/\\");
+  if (slash != std::string::npos) fileName = filePath.substr(slash + 1);
+
+  auto* items = sdk_->getVideoHelper()->getVirtualBackgroundItemList();
+  if (items) {
+    for (int i = 0; i < items->GetCount(); i++) {
+      auto* candidate = items->GetItem(i);
+      std::string name = WideToUtf8(candidate->getImageName());
+      std::string path = WideToUtf8(candidate->getImageFilePath());
+      if (name == fileName || path == filePath) {
+        result->Success(flutter::EncodableValue(
+            SerializeVirtualBackgroundItem(candidate)));
+        return;
+      }
+    }
+  }
+  // 추가는 성공했지만 목록에서 못 찾으면 no-value (Dart는 null로 해석).
+  result->Success();
 }
 
 void ZoomVideoSdkFlutterPlugin::HandleVBGetItemList(

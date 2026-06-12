@@ -45,6 +45,8 @@ class ZoomVideoSdkFlutterPlugin : public flutter::Plugin {
   // 메서드별 핸들러
   void HandleInit(const flutter::EncodableMap* args,
                   std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
+  void HandleCleanup(
+      std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
   void HandleJoinSession(const flutter::EncodableMap* args,
                          std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
   void HandleLeaveSession(const flutter::EncodableMap* args,
@@ -56,6 +58,10 @@ class ZoomVideoSdkFlutterPlugin : public flutter::Plugin {
   void HandleGetAllUsers(
       std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
   void HandleGetRemoteUsers(
+      std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
+
+  // Command Channel
+  void HandleSendCommand(const flutter::EncodableMap* args,
       std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
 
   // Audio
