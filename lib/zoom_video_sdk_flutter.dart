@@ -222,7 +222,7 @@ class ZoomUser {
   /// reported on Windows; defaults to `false` elsewhere.
   final bool isSharing;
 
-  /// JWT `user_key`(구 user_identity) — 서버가 발급한 커스텀 식별자.
+  /// Server-issued custom identifier from the JWT `user_key` field (formerly `user_identity`).
   final String? customUserId;
 }
 
@@ -281,7 +281,7 @@ class ZoomChatMessage {
     required this.timestamp,
   });
 
-  /// 세션 내 고유 메시지 ID — 수신측 dedupe 용.
+  /// Unique message identifier within the session — used for deduplication on the receiver side.
   final String messageId;
 
   /// Message content. Max 10,000 bytes.
@@ -1089,7 +1089,7 @@ class ZoomVirtualBackgroundHelper {
   }
 }
 
-/// Command channel — 세션 내 다른 사용자에게 커스텀 문자열 커맨드를 보낸다.
+/// Command channel — sends a custom string command to other users in a session.
 ///
 /// Access via [ZoomVideoSdk.cmdHelper].
 class ZoomCmdHelper {
@@ -1097,10 +1097,14 @@ class ZoomCmdHelper {
 
   final MethodChannel _channel;
 
-  /// [receiverUserId] 가 null 이면 세션 전체 브로드캐스트.
+  /// Sends a custom string command to a specific user or broadcasts to all session
+  /// participants when [receiverUserId] is null.
   ///
   /// **Platform support:** Android ❌ iOS ❌ Windows ✅ macOS ✅
+  ///
+  /// Throws [UnimplementedError] on Android and iOS.
   Future<void> sendCommand(String command, {String? receiverUserId}) async {
+    _assertDesktopOnly('sendCommand()');
     await _channel.invokeMethod<void>('cmd.sendCommand', {
       'command': command,
       'receiverUserId': ?receiverUserId,
@@ -1431,16 +1435,23 @@ class ZoomVideoSdk {
 
   // ---- Cleanup ----
 
-  /// 네이티브 SDK 를 완전히 해제한다(이후 재 init 가능).
+  /// Fully tears down the native SDK, allowing re-initialisation via [init].
+  ///
+  /// See also [dispose], which only releases Dart-side streams.
   ///
   /// **Platform support:** Android ❌ iOS ❌ Windows ✅ macOS ✅
+  ///
+  /// Throws [UnimplementedError] on Android and iOS.
   Future<void> cleanup() async {
+    _assertDesktopOnly('cleanup()');
     await _channel.invokeMethod<void>('cleanup');
   }
 
   /// Releases SDK resources and closes all event stream controllers.
   ///
   /// Must be called when the SDK is no longer needed.
+  ///
+  /// See also [cleanup], which releases the native SDK and allows re-init.
   ///
   /// **Platform support:** Android ✅ iOS ✅ Windows ✅ macOS ✅
   void dispose() {

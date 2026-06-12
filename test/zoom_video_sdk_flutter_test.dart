@@ -713,8 +713,14 @@ void main() {
   // ---- New: cleanup ----
 
   group('ZoomVideoSdk.cleanup', () {
-    setUp(() => sdk = ZoomVideoSdk());
-    tearDown(() => sdk.dispose());
+    setUp(() {
+      debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+      sdk = ZoomVideoSdk();
+    });
+    tearDown(() {
+      debugDefaultTargetPlatformOverride = null;
+      sdk.dispose();
+    });
 
     test('cleanup sends cleanup channel call', () async {
       await sdk.cleanup();
@@ -726,8 +732,14 @@ void main() {
   // ---- New: CmdHelper ----
 
   group('CmdHelper', () {
-    setUp(() => sdk = ZoomVideoSdk());
-    tearDown(() => sdk.dispose());
+    setUp(() {
+      debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+      sdk = ZoomVideoSdk();
+    });
+    tearDown(() {
+      debugDefaultTargetPlatformOverride = null;
+      sdk.dispose();
+    });
 
     test('sendCommand with receiverUserId sends correct args', () async {
       await sdk.cmdHelper.sendCommand(
@@ -892,6 +904,16 @@ void main() {
       expect(can, isTrue);
     });
 
+    test('sendCommand does not throw on desktop', () async {
+      await sdk.cmdHelper.sendCommand('hello');
+      expect(calls.first.method, 'cmd.sendCommand');
+    });
+
+    test('cleanup does not throw on desktop', () async {
+      await sdk.cleanup();
+      expect(calls.first.method, 'cleanup');
+    });
+
     test('desktop-only methods throw on Android', () {
       debugDefaultTargetPlatformOverride = TargetPlatform.android;
       expect(() => sdk.videoHelper.getCameraList(), throwsUnimplementedError);
@@ -907,6 +929,8 @@ void main() {
         () => sdk.recordingHelper.canStartRecording(),
         throwsUnimplementedError,
       );
+      expect(() => sdk.cmdHelper.sendCommand('test'), throwsUnimplementedError);
+      expect(() => sdk.cleanup(), throwsUnimplementedError);
     });
 
     test('desktop-only methods throw on iOS', () {
@@ -924,6 +948,8 @@ void main() {
         () => sdk.recordingHelper.canStartRecording(),
         throwsUnimplementedError,
       );
+      expect(() => sdk.cmdHelper.sendCommand('test'), throwsUnimplementedError);
+      expect(() => sdk.cleanup(), throwsUnimplementedError);
     });
   });
 }

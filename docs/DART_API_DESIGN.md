@@ -21,7 +21,7 @@ throw UnimplementedError(
 ```
 
 The check uses `defaultTargetPlatform` so it works in tests and on device. A private
-helper `_assertPlatformSupported()` centralises this logic.
+helper `_assertDesktopOnly()` centralises this logic.
 
 Features that are **partially supported** (e.g. audio device selection on iOS) are
 still callable — the doc comment notes the limitation and callers decide how to handle
@@ -1156,5 +1156,7 @@ platform check and throw `UnimplementedError` before reaching native code.
 | `shareHelper.enableShareDeviceAudio(enable)` | Android, iOS |
 | `shareHelper.enableOptimizeForSharedVideo(enable)` | Android, iOS |
 | `recordingHelper.canStartRecording()` | Android, iOS |
+| `cmdHelper.sendCommand()` | Android, iOS |
+| `cleanup()` | Android, iOS |
 
 Each throws `UnimplementedError('<method>() is not supported on <platform>. See docs/DART_API_DESIGN.md for platform support details.')`.
