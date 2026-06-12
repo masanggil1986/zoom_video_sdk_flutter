@@ -39,6 +39,8 @@ class ZoomVideoSdkUser {
         userName: user.userName,
         isHost: user.isHost,
         customUserId: user.customUserId,
+        // 데스크톱 status 미제공 시 의도적 fail-safe 기본값:
+        // video unknown → false(꺼짐 가정), audio unknown → true(음소거 가정).
         videoStatus: ZoomVideoSdkVideoStatus._value(
           user.videoStatus?.isOn ?? false,
         ),

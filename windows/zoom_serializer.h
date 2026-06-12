@@ -226,7 +226,11 @@ inline flutter::EncodableMap SerializeVirtualBackgroundItem(IVirtualBackgroundIt
         flutter::EncodableValue(WideToUtf8(item->getImageName()));
     map[flutter::EncodableValue("imagePath")] =
         flutter::EncodableValue(WideToUtf8(item->getImageFilePath()));
-    // TODO(windows-verify): IVirtualBackgroundItem의 타입 게터 이름 확인 (getType() 추정).
+    // TODO(windows-verify): IVirtualBackgroundItem의 타입 게터 이름을 SDK 헤더에서
+    // 반드시 확인한다. 이 게터는 LOAD-BEARING: addItem(addVirtualBackgroundItem)과
+    // getItemList(getVirtualBackgroundItemList) 두 호출 경로가 모두 이 값에 의존하므로,
+    // 이름이 틀리면 VB 직렬화 전체가 링크 시점이 아닌 런타임에 조용히 깨진다.
+    // (다른 TODO들과 달리 링크 오류로 드러나지 않음 — 직접 검증 필수.)
     map[flutter::EncodableValue("type")] =
         flutter::EncodableValue(SerializeVBType(item->getType()));
     return map;

@@ -117,9 +117,13 @@ class ZoomVideoSdk {
     // 데스크톱 네이티브 joinSession 은 요청 수락 시 즉시 resolve 하고 실제
     // 성공/실패는 이벤트로 온다. 모바일의 결과 문자열 계약을 지키기 위해
     // sessionJoined/error 첫 이벤트를 기다려 문자열로 변환한다.
-    final outcome = zoomDesktopSdk.events
-        .where((e) => e is plugin.SessionJoinedEvent || e is plugin.ErrorEvent)
-        .first;
+    final outcome = Completer<plugin.ZoomEvent>();
+    final eventSub = zoomDesktopSdk.events.listen((e) {
+      if (!outcome.isCompleted &&
+          (e is plugin.SessionJoinedEvent || e is plugin.ErrorEvent)) {
+        outcome.complete(e);
+      }
+    });
     try {
       await zoomDesktopSdk.joinSession(
         plugin.ZoomJoinSessionConfig(
@@ -140,18 +144,25 @@ class ZoomVideoSdk {
         ),
       );
     } on PlatformException catch (e) {
+      await eventSub.cancel();
       return '${e.code}: ${e.message ?? ''}';
     }
-    final event = await outcome.timeout(
-      const Duration(seconds: 15),
-      onTimeout: () => const plugin.ErrorEvent(
-        errorCode: plugin.ZoomErrorCode.unknown,
-        message: 'join timeout',
-      ),
-    );
-    if (event is plugin.SessionJoinedEvent) return 'join session success';
-    final error = event as plugin.ErrorEvent;
-    return 'ZoomVideoSDKError_${error.errorCode.name}';
+    try {
+      // 15초: 네이티브 join 은 보통 수 초 내 이벤트를 돌려준다. 타임아웃 시
+      // 비성공 문자열을 돌려 앱의 기존 재시도 루프(최대 3회)가 이어받는다.
+      final event = await outcome.future.timeout(
+        const Duration(seconds: 15),
+        onTimeout: () => const plugin.ErrorEvent(
+          errorCode: plugin.ZoomErrorCode.unknown,
+          message: 'join timeout',
+        ),
+      );
+      if (event is plugin.SessionJoinedEvent) return 'join session success';
+      final error = event as plugin.ErrorEvent;
+      return 'ZoomVideoSDKError_${error.errorCode.name}';
+    } finally {
+      await eventSub.cancel();
+    }
   }
 
   Future<String> leaveSession(bool endSession) async {
@@ -169,8 +180,10 @@ class ZoomVideoSdkSession {
     }
     try {
       return ZoomVideoSdkUser.fromDesktop(await zoomDesktopSdk.getMyself());
-    } on PlatformException {
-      return null; // 세션 없음 — 모바일과 동일하게 null
+    } on PlatformException catch (e) {
+      // 세션 없음이 일반적이나 다른 채널 오류도 여기로 온다 — 디버그에서만 노출.
+      if (kDebugMode) debugPrint('[zoom_compat] getMySelf failed: ${e.code}');
+      return null; // 모바일과 동일하게 null
     }
   }
 
@@ -182,7 +195,11 @@ class ZoomVideoSdkSession {
     try {
       final users = await zoomDesktopSdk.getRemoteUsers();
       return users.map(ZoomVideoSdkUser.fromDesktop).toList();
-    } on PlatformException {
+    } on PlatformException catch (e) {
+      // 세션 없음이 일반적이나 다른 채널 오류도 여기로 온다 — 디버그에서만 노출.
+      if (kDebugMode) {
+        debugPrint('[zoom_compat] getRemoteUsers failed: ${e.code}');
+      }
       return null;
     }
   }
