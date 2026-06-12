@@ -91,6 +91,7 @@ class _SessionScreenState extends State<SessionScreen> {
       case UserActiveAudioChangedEvent():
       case ChatMessageReceivedEvent():
       case ErrorEvent():
+      case CommandReceivedEvent():
         break;
     }
   }

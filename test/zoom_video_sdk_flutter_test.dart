@@ -586,6 +586,7 @@ void main() {
 
     test('ZoomChatMessage construction', () {
       final msg = ZoomChatMessage(
+        messageId: '',
         content: 'hello',
         senderUser: const ZoomUser(userId: 's1', userName: 'Sender'),
         isChatToAll: true,
@@ -703,8 +704,156 @@ void main() {
         SessionNeedPasswordEvent() => 'needPw',
         SessionPasswordWrongEvent() => 'wrongPw',
         ErrorEvent() => 'error',
+        CommandReceivedEvent() => 'command',
       };
       expect(description, 'left');
+    });
+  });
+
+  // ---- New: cleanup ----
+
+  group('ZoomVideoSdk.cleanup', () {
+    setUp(() => sdk = ZoomVideoSdk());
+    tearDown(() => sdk.dispose());
+
+    test('cleanup sends cleanup channel call', () async {
+      await sdk.cleanup();
+      expect(calls, hasLength(1));
+      expect(calls.first.method, 'cleanup');
+    });
+  });
+
+  // ---- New: CmdHelper ----
+
+  group('CmdHelper', () {
+    setUp(() => sdk = ZoomVideoSdk());
+    tearDown(() => sdk.dispose());
+
+    test('sendCommand with receiverUserId sends correct args', () async {
+      await sdk.cmdHelper.sendCommand(
+        '{"type":"praise"}',
+        receiverUserId: 'u1',
+      );
+      expect(calls, hasLength(1));
+      expect(calls.first.method, 'cmd.sendCommand');
+      expect(calls.first.arguments, {
+        'command': '{"type":"praise"}',
+        'receiverUserId': 'u1',
+      });
+    });
+
+    test('sendCommand without receiverUserId omits key', () async {
+      await sdk.cmdHelper.sendCommand('hello');
+      expect(calls.first.method, 'cmd.sendCommand');
+      final args = calls.first.arguments as Map;
+      expect(args['command'], 'hello');
+      expect(args.containsKey('receiverUserId'), isFalse);
+    });
+  });
+
+  // ---- New: customUserId on ZoomUser ----
+
+  group('ZoomUser customUserId', () {
+    setUp(() => sdk = ZoomVideoSdk());
+    tearDown(() => sdk.dispose());
+
+    test('getMyself decodes customUserId', () async {
+      nextResult = {
+        'userId': 'u1',
+        'userName': 'Test',
+        'isHost': false,
+        'isManager': false,
+        'customUserId': 'custom-123',
+      };
+
+      final user = await sdk.getMyself();
+      expect(user.customUserId, 'custom-123');
+    });
+
+    test('getMyself with no customUserId returns null', () async {
+      nextResult = {
+        'userId': 'u1',
+        'userName': 'Test',
+        'isHost': false,
+        'isManager': false,
+      };
+
+      final user = await sdk.getMyself();
+      expect(user.customUserId, isNull);
+    });
+  });
+
+  // ---- New: CommandReceivedEvent ----
+
+  group('CommandReceivedEvent', () {
+    setUp(() => sdk = ZoomVideoSdk());
+    tearDown(() => sdk.dispose());
+
+    test('onCommandReceived stream is accessible', () {
+      expect(sdk.onCommandReceived, isNotNull);
+    });
+
+    test('CommandReceivedEvent is a ZoomEvent', () {
+      const event = CommandReceivedEvent(senderId: 'u2', command: 'hello');
+      expect(event, isA<ZoomEvent>());
+      expect(event.senderId, 'u2');
+      expect(event.command, 'hello');
+    });
+  });
+
+  // ---- New: VirtualBackground addItem returns item ----
+
+  group('VirtualBackgroundHelper.addItem returns item', () {
+    setUp(() => sdk = ZoomVideoSdk());
+    tearDown(() => sdk.dispose());
+
+    test(
+      'addItem returns ZoomVirtualBackgroundItem when result is non-null',
+      () async {
+        nextResult = {'imageName': 'a', 'imagePath': '/p/a', 'type': 'image'};
+
+        final item = await sdk.virtualBackgroundHelper.addItem('/p/a');
+        expect(item, isNotNull);
+        expect(item!.imageName, 'a');
+        expect(item.imagePath, '/p/a');
+        expect(item.type, 'image');
+        expect(calls.first.method, 'virtualBackground.addItem');
+      },
+    );
+
+    test('addItem returns null when native returns null', () async {
+      nextResult = null;
+      final item = await sdk.virtualBackgroundHelper.addItem('/p/b');
+      expect(item, isNull);
+    });
+  });
+
+  // ---- New: ZoomChatMessage messageId ----
+
+  group('ZoomChatMessage messageId', () {
+    test('ZoomChatMessage has messageId field', () {
+      final msg = ZoomChatMessage(
+        messageId: 'msg-001',
+        content: 'hi',
+        senderUser: const ZoomUser(userId: 's1', userName: 'S'),
+        isChatToAll: true,
+        isSelfSend: false,
+        timestamp: DateTime(2026),
+      );
+      expect(msg.messageId, 'msg-001');
+    });
+  });
+
+  // ---- New: ZoomVirtualBackgroundItem type field ----
+
+  group('ZoomVirtualBackgroundItem type', () {
+    test('ZoomVirtualBackgroundItem has type field', () {
+      const item = ZoomVirtualBackgroundItem(
+        imageName: 'bg1',
+        imagePath: '/bg1.png',
+        type: 'image',
+      );
+      expect(item.type, 'image');
     });
   });
 
